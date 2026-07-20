@@ -62,7 +62,7 @@ export async function POST(req: Request) {
 3. 어투는 반드시 한국어 비즈니스 톤('~했습니다', '~합니다')을 사용할 것.
 `;
 
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
     const fullPrompt = `${systemInstruction}\n\n사용자 경험 요약:\n${prompt}`;
     
     const result = await model.generateContent(fullPrompt);
