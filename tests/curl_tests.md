@@ -15,14 +15,14 @@
 for i in {1..3}; do
   curl -X POST https://<YOUR_VERCEL_DOMAIN>/api/generate \
     -H "Content-Type: application/json" \
-    -d '{"prompt": "마케팅 인턴으로 근무하며 데이터를 분석했습니다."}' \
+    -d "{\`"prompt\`": \`"마케팅 인턴으로 근무하며 데이터를 분석했습니다.\`"}" \
     -i
 done
 
 # 4회차 호출 (429 에러 기대)
 curl -X POST https://<YOUR_VERCEL_DOMAIN>/api/generate \
   -H "Content-Type: application/json" \
-  -d '{"prompt": "마케팅 인턴으로 근무하며 데이터를 분석했습니다."}' \
+  -d "{\`"prompt\`": \`"마케팅 인턴으로 근무하며 데이터를 분석했습니다.\`"}" \
   -i
 ```
 **기대 결과:** 4번째 요청에서 `HTTP/2 429` 및 `{"error": "Too Many Requests. Free tier limit exceeded (3 per 24h)."}` 반환.
@@ -35,7 +35,7 @@ curl -X POST https://<YOUR_VERCEL_DOMAIN>/api/generate \
 ```bash
 curl -X POST https://<YOUR_VERCEL_DOMAIN>/api/generate \
   -H "Content-Type: application/json" \
-  -d '{"prompt": "개발 프로젝트를 리딩했습니다.", "orderId": "test123"}' \
+  -d "{\`"prompt\`": \`"개발 프로젝트를 리딩했습니다.\`", \`"orderId\`": \`"test123\`"}" \
   -i
 ```
 **기대 결과:** `HTTP/2 403 Forbidden` 및 `{"error": "Forbidden. Invalid payment info or generations exhausted."}` 반환.
@@ -52,14 +52,14 @@ curl -X POST https://<YOUR_VERCEL_DOMAIN>/api/generate \
 for i in {1..3}; do
   curl -X POST https://<YOUR_VERCEL_DOMAIN>/api/generate \
     -H "Content-Type: application/json" \
-    -d '{"prompt": "테스트입니다.", "orderId": "valid-order-456"}' \
+    -d "{\`"prompt\`": \`"테스트입니다.\`", \`"orderId\`": \`"valid-order-456\`"}" \
     -i
 done
 
 # 4회차 호출 (잔여 횟수 0으로 인한 403 에러 기대)
 curl -X POST https://<YOUR_VERCEL_DOMAIN>/api/generate \
   -H "Content-Type: application/json" \
-  -d '{"prompt": "테스트입니다.", "orderId": "valid-order-456"}' \
+  -d "{\`"prompt\`": \`"테스트입니다.\`", \`"orderId\`": \`"valid-order-456\`"}" \
   -i
 ```
 **기대 결과:** 4번째 요청에서 `HTTP/2 403 Forbidden` 반환 (데이터베이스에 남은 횟수가 없기 때문).
