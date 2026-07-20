@@ -5,8 +5,8 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 
 // Initialize Redis
 const redis = new Redis({
-  url: process.env.UPSTASH_REDIS_REST_URL || "https://dummy-url.upstash.io",
-  token: process.env.UPSTASH_REDIS_REST_TOKEN || "dummy-token",
+  url: process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL || "https://dummy-url.upstash.io",
+  token: process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN || "dummy-token",
 });
 
 // Initialize Rate Limiter: max 3 requests per 24 hours per IP
