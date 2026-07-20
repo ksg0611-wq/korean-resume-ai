@@ -4,13 +4,13 @@ import { Ratelimit } from "@upstash/ratelimit";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 export async function POST(req: Request) {
-  // Initialize Redis inside function to ensure env vars are loaded
+  // Initialize Redis inside function to ensure env vars are loaded at runtime
   const redis = new Redis({
     url: process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL || "https://dummy-url.upstash.io",
     token: process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN || "dummy-token",
   });
 
-  // Initialize Rate Limiter
+  // Initialize Rate Limiter: max 3 requests per 24 hours per IP (slidingWindow)
   const ratelimit = new Ratelimit({
     redis: redis,
     limiter: Ratelimit.slidingWindow(3, "24 h"),
@@ -21,13 +21,42 @@ export async function POST(req: Request) {
 
   try {
     const body = await req.json();
-    const { prompt, orderId } = body;
+    const { jobTitle, memo, isFree, orderId } = body;
 
-    // IP Parsing rule compliance
+    // ── Strict Field Validation ──
+    // Reject requests missing required fields or using legacy single-prompt format
+    if (typeof jobTitle !== "string" || !jobTitle.trim()) {
+      return NextResponse.json(
+        { error: "Bad Request. 'jobTitle' (string) is required." },
+        { status: 400 }
+      );
+    }
+    if (typeof memo !== "string" || !memo.trim()) {
+      return NextResponse.json(
+        { error: "Bad Request. 'memo' (string) is required." },
+        { status: 400 }
+      );
+    }
+    if (typeof isFree !== "boolean") {
+      return NextResponse.json(
+        { error: "Bad Request. 'isFree' (boolean) is required." },
+        { status: 400 }
+      );
+    }
+    // If paid request, orderId must be a non-empty string
+    if (!isFree && (typeof orderId !== "string" || !orderId.trim())) {
+      return NextResponse.json(
+        { error: "Bad Request. 'orderId' (string) is required for paid requests." },
+        { status: 400 }
+      );
+    }
+
+    // ── IP Parsing (proxy-chain safe) ──
     const ip = (req.headers.get("x-forwarded-for") ?? "127.0.0.1").split(",")[0].trim();
 
-    // If no orderId is provided, we assume it's a free tier request
-    if (!orderId) {
+    // ── Rate Limiting / Payment Validation ──
+    if (isFree) {
+      // Free tier: slidingWindow 3 req / 24h per IP
       const { success } = await ratelimit.limit(`ratelimit_free_${ip}`);
       if (!success) {
         return NextResponse.json(
@@ -36,10 +65,15 @@ export async function POST(req: Request) {
         );
       }
     } else {
-      // One-Time Payment Validation
+      // Paid tier: validate orderId against Redis
       const orderData: any = await redis.get(`order:${orderId}`);
-      
-      if (!orderData || !orderData.paid || typeof orderData.remainingGenerations !== "number" || orderData.remainingGenerations < 1) {
+
+      if (
+        !orderData ||
+        !orderData.paid ||
+        typeof orderData.remainingGenerations !== "number" ||
+        orderData.remainingGenerations < 1
+      ) {
         return NextResponse.json(
           { error: "Forbidden. Invalid payment info or generations exhausted." },
           { status: 403 }
@@ -47,11 +81,7 @@ export async function POST(req: Request) {
       }
     }
 
-    if (!prompt) {
-      return NextResponse.json({ error: "Prompt is required." }, { status: 400 });
-    }
-
-    // Prompt Engineering for AI
+    // ── Prompt Engineering ──
     const systemInstruction = `
 당신은 한국 시장에 최적화된 전문 자기소개서 컨설턴트입니다.
 사용자가 제공한 경험을 바탕으로 완벽한 자기소개서 초안을 작성해주세요.
@@ -62,19 +92,19 @@ export async function POST(req: Request) {
 3. 어투는 반드시 한국어 비즈니스 톤('~했습니다', '~합니다')을 사용할 것.
 `;
 
+    const fullPrompt = `${systemInstruction}\n\n지원 직무: ${jobTitle.trim()}\n\n사용자 경험 요약:\n${memo.trim()}`;
+
     const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite" });
-    const fullPrompt = `${systemInstruction}\n\n사용자 경험 요약:\n${prompt}`;
-    
     const result = await model.generateContent(fullPrompt);
     const responseText = result.response.text();
 
-    // Deduct generation count if it was a paid request
-    if (orderId) {
+    // ── Deduct generation count (paid requests only) ──
+    if (!isFree && orderId) {
       const orderData: any = await redis.get(`order:${orderId}`);
       if (orderData && orderData.remainingGenerations > 0) {
         await redis.set(`order:${orderId}`, {
           ...orderData,
-          remainingGenerations: orderData.remainingGenerations - 1
+          remainingGenerations: orderData.remainingGenerations - 1,
         });
       }
     }
