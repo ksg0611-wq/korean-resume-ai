@@ -1,6 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import { loadPaymentWidget, PaymentWidgetInstance } from "@tosspayments/payment-widget-sdk";
+
+const clientKey = process.env.NEXT_PUBLIC_TOSS_CLIENT_KEY || "test_ck_D5GePWvyJnrK0W0k6q8gLzN97Eoq";
+const customerKey = "GUEST"; // 비회원 결제
 
 export default function Home() {
   const [resumePrompt, setResumePrompt] = useState("");
@@ -8,13 +12,42 @@ export default function Home() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [result, setResult] = useState("");
   const [error, setError] = useState("");
-  const [orderId, setOrderId] = useState("");
+  
+  const paymentWidgetRef = useRef<PaymentWidgetInstance | null>(null);
+  const paymentMethodsWidgetRef = useRef<any>(null);
 
   useEffect(() => {
     const savedDraft = localStorage.getItem("resumeDraft");
     if (savedDraft) {
       setResumePrompt(savedDraft);
     }
+
+    // 자동 생성 체크 (결제 성공 후 리다이렉트 시)
+    const urlParams = new URLSearchParams(window.location.search);
+    const successOrderId = urlParams.get("orderId");
+    if (successOrderId && savedDraft) {
+      // URL 파라미터 지우기
+      window.history.replaceState({}, document.title, "/");
+      handleGenerate(successOrderId, savedDraft);
+    }
+
+    // 결제 위젯 초기화
+    (async () => {
+      try {
+        const paymentWidget = await loadPaymentWidget(clientKey, customerKey);
+        paymentWidgetRef.current = paymentWidget;
+        
+        const paymentMethodsWidget = paymentWidget.renderPaymentMethods(
+          "#payment-widget",
+          { value: 4900 },
+          { variantKey: "DEFAULT" }
+        );
+        paymentWidget.renderAgreement("#agreement", { variantKey: "AGREEMENT" });
+        paymentMethodsWidgetRef.current = paymentMethodsWidget;
+      } catch (err) {
+        console.error("결제 위젯 초기화 실패:", err);
+      }
+    })();
   }, []);
 
   const handlePromptChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -22,21 +55,42 @@ export default function Home() {
     localStorage.setItem("resumeDraft", e.target.value);
   };
 
-  const handlePaymentAndGenerate = async () => {
+  const requestPayment = async () => {
     if (!agreedToRefundPolicy) return;
     
+    const paymentWidget = paymentWidgetRef.current;
+    if (!paymentWidget) {
+      setError("결제 위젯이 로드되지 않았습니다.");
+      return;
+    }
+
+    try {
+      const orderId = "order_" + Math.random().toString(36).substring(2, 11);
+      await paymentWidget.requestPayment({
+        orderId,
+        orderName: "자기소개서 AI 생성 (3회권)",
+        successUrl: window.location.origin + "/payments/success",
+        failUrl: window.location.origin + "/payments/fail",
+      });
+    } catch (err: any) {
+      setError(err.message || "결제 요청 중 오류가 발생했습니다.");
+    }
+  };
+
+  const handleGenerate = async (paidOrderId?: string, promptText?: string) => {
     setIsGenerating(true);
     setError("");
     setResult("");
 
     try {
-      // In a real app, Toss Payments Widget would be called here to get an orderId after successful payment.
-      // For this implementation, we will use the provided orderId or simulate one for testing.
-      // The API endpoint handles both free generation (no orderId) and paid generation (with valid orderId).
+      const payload: any = { 
+        jobTitle: "일반 직무", // 임시 직무
+        memo: promptText || resumePrompt,
+        isFree: !paidOrderId,
+      };
       
-      const payload: any = { prompt: resumePrompt };
-      if (orderId.trim() !== "") {
-        payload.orderId = orderId;
+      if (paidOrderId) {
+        payload.orderId = paidOrderId;
       }
 
       const res = await fetch("/api/generate", {
@@ -49,10 +103,10 @@ export default function Home() {
 
       if (!res.ok) {
         if (res.status === 429) {
-          throw new Error("무료 이용 횟수(3회)를 초과했습니다. 결제가 필요합니다.");
+          throw new Error("무료 생성 횟수가 초과되었습니다.");
         }
         if (res.status === 403) {
-          throw new Error("유효하지 않은 결제 정보이거나 생성 횟수가 소진되었습니다.");
+          throw new Error("결제 정보가 유효하지 않습니다.");
         }
         throw new Error("생성 중 오류가 발생했습니다.");
       }
@@ -89,20 +143,10 @@ export default function Home() {
         </section>
 
         <section className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 flex flex-col gap-4">
-          <h2 className="text-xl font-semibold">결제 및 생성</h2>
+          <h2 className="text-xl font-semibold">결제 및 생성 (4,900원)</h2>
           
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              테스트용 Order ID (유료 결제 시 입력)
-            </label>
-            <input
-              type="text"
-              className="w-full p-2 border border-gray-300 rounded-md outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="orderId를 입력하세요 (비워두면 무료 호출 테스트)"
-              value={orderId}
-              onChange={(e) => setOrderId(e.target.value)}
-            />
-          </div>
+          <div id="payment-widget" className="w-full"></div>
+          <div id="agreement" className="w-full"></div>
 
           <label className="flex items-start gap-3 cursor-pointer p-3 bg-gray-50 border border-gray-200 rounded-md">
             <input
@@ -117,11 +161,19 @@ export default function Home() {
           </label>
 
           <button
-            onClick={handlePaymentAndGenerate}
-            disabled={!agreedToRefundPolicy || isGenerating || !resumePrompt.trim()}
+            onClick={requestPayment}
+            disabled={!agreedToRefundPolicy || !resumePrompt.trim()}
             className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-medium rounded-md shadow-sm transition"
           >
-            {isGenerating ? "AI 자소서 생성 중..." : "결제 및 AI 자소서 생성하기"}
+            결제하기
+          </button>
+
+          <button
+            onClick={() => handleGenerate()}
+            disabled={isGenerating || !resumePrompt.trim()}
+            className="w-full py-3 px-4 bg-white border border-blue-600 text-blue-600 hover:bg-blue-50 disabled:border-gray-300 disabled:text-gray-400 disabled:bg-gray-50 disabled:cursor-not-allowed font-medium rounded-md shadow-sm transition mt-2"
+          >
+            {isGenerating ? "AI 자소서 생성 중..." : "무료로 생성하기 (일 3회 제한)"}
           </button>
 
           {error && (
@@ -143,3 +195,4 @@ export default function Home() {
     </main>
   );
 }
+
