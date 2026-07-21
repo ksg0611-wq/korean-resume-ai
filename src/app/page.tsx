@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useRef } from "react";
 import { loadPaymentWidget, PaymentWidgetInstance } from "@tosspayments/payment-widget-sdk";
+import PreviewCard from "@/components/PreviewCard";
+import FAQAccordion from "@/components/FAQAccordion";
 
 const clientKey = process.env.NEXT_PUBLIC_TOSS_CLIENT_KEY || "test_gck_EXAMPLETEST";
 const customerKey = "GUEST"; // 비회원 결제
@@ -151,13 +153,14 @@ export default function Home() {
   };
 
   return (
-    <main className="min-h-screen flex flex-col items-center p-8 sm:p-24 bg-gray-50 text-gray-900">
+    <main className="flex-1 flex flex-col items-center p-8 sm:p-24 bg-gray-50 text-gray-900">
       <div className="max-w-2xl w-full flex flex-col gap-8">
         <header className="text-center">
-          <h1 className="text-4xl font-bold mb-4">Korean Resume AI Tool</h1>
-          <p className="text-lg text-gray-600">
+          <h1 className="text-3xl sm:text-4xl font-bold mb-4">STAR 프레임워크 기반 AI 자소서 & 면접 꼬리질문 시뮬레이터</h1>
+          <p className="text-lg text-gray-600 mb-6">
             STAR 프레임워크와 직무별 키워드 매핑 로직을 적용해 완벽한 자소서 초안을 만듭니다.
           </p>
+          <PreviewCard />
         </header>
 
         <section className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
@@ -190,6 +193,18 @@ export default function Home() {
             </span>
           </label>
 
+          <div className="flex flex-col sm:flex-row justify-center gap-4 text-sm font-semibold text-green-700 bg-green-50 py-3 px-4 rounded-md border border-green-100">
+            <span className="flex items-center justify-center gap-1">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+              구독 자동 결제 없음 (1회 단건 결제)
+            </span>
+            <span className="hidden sm:inline text-green-300">|</span>
+            <span className="flex items-center justify-center gap-1">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+              STAR 기반 3회 생성/재생성 포함
+            </span>
+          </div>
+
           <button
             onClick={requestPayment}
             disabled={!agreedToRefundPolicy || !resumePrompt.trim() || !isWidgetReady}
@@ -212,6 +227,8 @@ export default function Home() {
             </div>
           )}
         </section>
+
+        <FAQAccordion />
 
         {result && (
           <section className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">

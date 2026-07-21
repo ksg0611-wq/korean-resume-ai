@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, Suspense } from "react";
 import { loadPaymentWidget, PaymentWidgetInstance } from "@tosspayments/payment-widget-sdk";
+import FAQAccordion from "@/components/FAQAccordion";
 
 const clientKey = process.env.NEXT_PUBLIC_TOSS_CLIENT_KEY || "test_gck_EXAMPLETEST";
 const customerKey = "GUEST"; // 비회원 결제
@@ -146,7 +147,7 @@ function InterviewContent() {
   };
 
   return (
-    <main className="min-h-screen flex flex-col items-center p-8 sm:p-24 bg-gray-50 text-gray-900">
+    <main className="flex-1 flex flex-col items-center p-8 sm:p-24 bg-gray-50 text-gray-900">
       <div className="max-w-2xl w-full flex flex-col gap-8">
         <header className="text-center">
           <h1 className="text-4xl font-bold mb-4">AI 면접 꼬리질문 시뮬레이터</h1>
@@ -196,6 +197,18 @@ function InterviewContent() {
             </span>
           </label>
 
+          <div className="flex flex-col sm:flex-row justify-center gap-4 text-sm font-semibold text-green-700 bg-green-50 py-3 px-4 rounded-md border border-green-100">
+            <span className="flex items-center justify-center gap-1">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+              구독 자동 결제 없음 (1회 단건 결제)
+            </span>
+            <span className="hidden sm:inline text-green-300">|</span>
+            <span className="flex items-center justify-center gap-1">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+              STAR 기반 3회 생성/재생성 포함
+            </span>
+          </div>
+
           <button
             onClick={requestPayment}
             disabled={!agreedToRefundPolicy || !resumeText || !isWidgetReady}
@@ -218,6 +231,8 @@ function InterviewContent() {
             </div>
           )}
         </section>
+
+        <FAQAccordion />
 
         {result && (
           <section className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
