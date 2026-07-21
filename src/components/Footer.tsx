@@ -55,9 +55,19 @@ export default function Footer() {
       </div>
     ),
     privacy: (
-      <div>
-        <p className="mb-2"><strong>수집하는 개인정보 항목:</strong><br />서비스는 결제 처리(Toss Payments 연동) 및 서비스 제공을 위해 최소한의 정보를 수집할 수 있습니다. 사용자가 입력한 자소서 원문은 개인을 식별할 수 없는 상태로 AI 모델에 전송되며, 즉시 파기(Burn-on-read)되거나 10분 내로 소멸됩니다.</p>
-        <p><strong>개인정보의 제3자 제공:</strong><br />입력된 자소서 내용은 생성 목적으로 Google Gemini API로 전송되어 처리됩니다. 그 외의 목적으로 제3자에게 제공되지 않습니다.</p>
+      <div className="space-y-4">
+        <div>
+          <p className="font-semibold mb-1">1. 수집하는 개인정보 항목</p>
+          <p>서비스는 결제 처리(Toss Payments 연동) 및 서비스 제공을 위해 최소한의 정보를 수집할 수 있습니다. 사용자가 입력한 자소서 원문은 개인을 식별할 수 없는 상태로 AI 모델에 전송되며, 임시 토큰으로 저장된 후 조회 즉시 파기(Burn-on-read)되거나 10분 내로 소멸됩니다.</p>
+        </div>
+        <div>
+          <p className="font-semibold mb-1">2. 개인정보의 제3자 제공</p>
+          <p>입력된 자소서 내용은 서비스 제공(생성) 목적에 한정하여 처리되며, 그 외의 목적으로 제3자에게 임의 제공되지 않습니다.</p>
+        </div>
+        <div>
+          <p className="font-semibold mb-1">3. AI 서비스 제공을 위한 제3자 데이터 전송 고시</p>
+          <p>본 서비스는 입력하신 자기소개서 및 면접 관련 텍스트 데이터를 AI 질문 및 문서 생성을 위해 Google Gemini API로 전송하여 처리합니다. 전송된 데이터는 AI 모델 학습에 활용되지 않으며, 토큰 기반 처리 후 즉시 파기됩니다.</p>
+        </div>
       </div>
     ),
     refund: (
@@ -73,9 +83,10 @@ export default function Footer() {
       <div className="max-w-4xl mx-auto px-6 py-8">
         <div className="flex flex-col md:flex-row justify-between items-center gap-4">
           <div className="text-center md:text-left text-gray-500 text-sm leading-relaxed">
-            <p className="font-semibold text-gray-700">Korean Resume AI</p>
-            <p>대표/개발자: [운영자] | 문의: support@korean-resume-ai.com</p>
-            <p>개인 개발 프로젝트</p>
+            <p className="font-semibold text-gray-700 mb-1">Korean Resume AI</p>
+            <p>대표자 / 운영자: [운영자 성명 입력]</p>
+            <p>문의 이메일: support@korean-resume-ai.com</p>
+            <p>사업자 정보: [개인 개발 프로젝트 / 사업자등록번호 기재 영역]</p>
           </div>
           
           <div className="flex gap-4 text-sm text-gray-600 mt-4 md:mt-0">

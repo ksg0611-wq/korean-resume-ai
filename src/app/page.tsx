@@ -189,7 +189,7 @@ export default function Home() {
               onChange={(e) => setAgreedToRefundPolicy(e.target.checked)}
             />
             <span className="text-sm text-gray-700">
-              결제 완료 시 즉시 AI 생성이 시작되는 디지털 콘텐츠 특성상, 생성 시작 후 단순 변심에 의한 환불이 불가함에 동의합니다. (면접 꼬리질문 기능도 입력된 자소서 내용을 Google Gemini API로 전송하여 처리함)
+              [필수] 결제 완료 시 즉시 AI 생성이 시작되는 디지털 콘텐츠 특성상, 생성 시작 후 단순 변심에 의한 환불이 불가함에 동의합니다.
             </span>
           </label>
 
