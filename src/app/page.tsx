@@ -12,6 +12,7 @@ export default function Home() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [result, setResult] = useState("");
   const [error, setError] = useState("");
+  const [isWidgetReady, setIsWidgetReady] = useState(false);
   
   const paymentWidgetRef = useRef<PaymentWidgetInstance | null>(null);
   const paymentMethodsWidgetRef = useRef<any>(null);
@@ -43,6 +44,9 @@ export default function Home() {
           { variantKey: "DEFAULT" }
         );
         paymentWidget.renderAgreement("#agreement", { variantKey: "AGREEMENT" });
+        paymentMethodsWidget.on("ready", () => {
+          setIsWidgetReady(true);
+        });
         paymentMethodsWidgetRef.current = paymentMethodsWidget;
       } catch (err) {
         console.error("결제 위젯 초기화 실패:", err);
@@ -56,7 +60,7 @@ export default function Home() {
   };
 
   const requestPayment = async () => {
-    if (!agreedToRefundPolicy) return;
+    if (!agreedToRefundPolicy || !isWidgetReady) return;
     
     const paymentWidget = paymentWidgetRef.current;
     if (!paymentWidget) {
@@ -162,10 +166,10 @@ export default function Home() {
 
           <button
             onClick={requestPayment}
-            disabled={!agreedToRefundPolicy || !resumePrompt.trim()}
+            disabled={!agreedToRefundPolicy || !resumePrompt.trim() || !isWidgetReady}
             className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-medium rounded-md shadow-sm transition"
           >
-            결제하기
+            {!isWidgetReady ? "결제 모듈 로딩 중..." : "결제하기"}
           </button>
 
           <button
