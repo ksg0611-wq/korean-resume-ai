@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { loadPaymentWidget, PaymentWidgetInstance } from "@tosspayments/payment-widget-sdk";
 
-const clientKey = process.env.NEXT_PUBLIC_TOSS_CLIENT_KEY || "test_ck_D5GePWvyJnrK0W0k6q8gLzN97Eoq";
+const clientKey = process.env.NEXT_PUBLIC_TOSS_CLIENT_KEY || "test_gck_EXAMPLETEST";
 const customerKey = "GUEST"; // 비회원 결제
 
 export default function Home() {
@@ -35,6 +35,7 @@ export default function Home() {
     // 결제 위젯 초기화
     (async () => {
       try {
+        console.log("Toss Client Key:", clientKey);
         const paymentWidget = await loadPaymentWidget(clientKey, customerKey);
         paymentWidgetRef.current = paymentWidget;
         
@@ -50,6 +51,7 @@ export default function Home() {
         paymentMethodsWidgetRef.current = paymentMethodsWidget;
       } catch (err) {
         console.error("결제 위젯 초기화 실패:", err);
+        setError("결제 모듈을 불러오지 못했습니다. Client Key를 확인해주세요.");
       }
     })();
   }, []);
