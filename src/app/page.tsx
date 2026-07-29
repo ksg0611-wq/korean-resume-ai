@@ -168,19 +168,24 @@ export default function Home() {
         </header>
 
         <section className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label htmlFor="resume-textarea" className="block text-sm font-medium text-gray-700 mb-2">
             자기소개서 작성 내용 (상황, 과제, 행동, 결과를 자유롭게 작성해주세요)
           </label>
           <textarea
-            className="w-full h-48 p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
-            placeholder="예: 마케팅 인턴으로 근무하며..."
+            id="resume-textarea"
+            className="w-full h-48 p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition resize-none"
+            placeholder="예: 마케팅 인턴으로 근무하며... (완벽한 문장이 아니어도 괄찮습니다. 생각나는 단어나 핵심 메모만 편하게 적어주시면 AI가 알아서 STAR 기법으로 완성해 드립니다.)"
+            maxLength={1000}
             value={resumePrompt}
             onChange={handlePromptChange}
           ></textarea>
+          <div className="flex justify-end mt-1">
+            <span className="text-xs text-gray-400">{resumePrompt.length} / 1000자</span>
+          </div>
         </section>
 
         {/* 마케팅/가치 제안 블록 */}
-        <section className="bg-blue-50 border border-blue-100 rounded-lg p-6 flex flex-col gap-4">
+        <section className="bg-blue-50 border border-blue-100 rounded-lg p-8 flex flex-col gap-4">
           {/* 가격 앵커링 */}
           <p className="text-sm sm:text-base font-semibold text-blue-900 leading-relaxed">
             💡 시중 자소서 컨설팅 5~10만원대 → 커피 한 잔 값({PRICE_DISPLAY}원)으로 STAR 기법 기반 전문 초안을 즉시 받아보세요
@@ -210,10 +215,11 @@ export default function Home() {
           <div id="payment-widget" className="w-full"></div>
           <div id="agreement" className="w-full"></div>
 
-          <label className="flex items-start gap-3 cursor-pointer p-3 bg-gray-50 border border-gray-200 rounded-md">
+          <label htmlFor="refund-agree" className="flex items-start gap-3 cursor-pointer p-3 bg-gray-50 border border-gray-200 rounded-md">
             <input
+              id="refund-agree"
               type="checkbox"
-              className="mt-1 w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+              className="mt-1 w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500 flex-shrink-0"
               checked={agreedToRefundPolicy}
               onChange={(e) => setAgreedToRefundPolicy(e.target.checked)}
             />
