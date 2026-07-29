@@ -8,6 +8,10 @@ import FAQAccordion from "@/components/FAQAccordion";
 const clientKey = process.env.NEXT_PUBLIC_TOSS_CLIENT_KEY || "test_gck_EXAMPLETEST";
 const customerKey = "GUEST"; // 비회원 결제
 
+/** 서비스 결제 금액 (원). 마케팅 문구와 결제 위젯이 이 값을 공유하여 불일치를 방지합니다. */
+const PRICE = 4900;
+const PRICE_DISPLAY = PRICE.toLocaleString("ko-KR"); // "4,900"
+
 export default function Home() {
   const [resumePrompt, setResumePrompt] = useState("");
   const [agreedToRefundPolicy, setAgreedToRefundPolicy] = useState(false);
@@ -44,7 +48,7 @@ export default function Home() {
         
         const paymentMethodsWidget = paymentWidget.renderPaymentMethods(
           "#payment-widget",
-          { value: 4900 },
+          { value: PRICE },
           { variantKey: "DEFAULT" }
         );
         paymentWidget.renderAgreement("#agreement", { variantKey: "AGREEMENT" });
@@ -179,7 +183,7 @@ export default function Home() {
         <section className="bg-blue-50 border border-blue-100 rounded-lg p-6 flex flex-col gap-4">
           {/* 가격 앵커링 */}
           <p className="text-sm sm:text-base font-semibold text-blue-900 leading-relaxed">
-            💡 시중 자소서 컨설팅 5~10만원대 → 커피 한 잔 값(4,900원)으로 STAR 기법 기반 전문 초안을 즉시 받아보세요
+            💡 시중 자소서 컨설팅 5~10만원대 → 커피 한 잔 값({PRICE_DISPLAY}원)으로 STAR 기법 기반 전문 초안을 즉시 받아보세요
           </p>
 
           {/* 타깃 추천 체크리스트 */}
@@ -201,7 +205,7 @@ export default function Home() {
         </section>
 
         <section className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 flex flex-col gap-4">
-          <h2 className="text-xl font-semibold">결제 및 생성 (4,900원)</h2>
+          <h2 className="text-xl font-semibold">결제 및 생성 ({PRICE_DISPLAY}원)</h2>
           
           <div id="payment-widget" className="w-full"></div>
           <div id="agreement" className="w-full"></div>
