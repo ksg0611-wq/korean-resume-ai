@@ -175,6 +175,31 @@ export default function Home() {
           ></textarea>
         </section>
 
+        {/* 마케팅/가치 제안 블록 */}
+        <section className="bg-blue-50 border border-blue-100 rounded-lg p-6 flex flex-col gap-4">
+          {/* 가격 앵커링 */}
+          <p className="text-sm sm:text-base font-semibold text-blue-900 leading-relaxed">
+            💡 시중 자소서 컨설팅 5~10만원대 → 커피 한 잔 값(4,900원)으로 STAR 기법 기반 전문 초안을 즉시 받아보세요
+          </p>
+
+          {/* 타깃 추천 체크리스트 */}
+          <div>
+            <p className="text-sm font-semibold text-gray-800 mb-3">이런 분께 추천합니다</p>
+            <ul className="flex flex-col gap-2">
+              {[
+                "자소서를 뭐부터 고쳐야 할지 막막하신 분",
+                "STAR 기법은 알지만 내 경험에 어떻게 적용할지 모르시는 분",
+                "면접 전 예상 질문까지 한 번에 준비하고 싶으신 분",
+              ].map((item) => (
+                <li key={item} className="flex items-start gap-2 text-sm text-gray-700">
+                  <span className="mt-0.5 flex-shrink-0 text-blue-600 font-bold">✓</span>
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </section>
+
         <section className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 flex flex-col gap-4">
           <h2 className="text-xl font-semibold">결제 및 생성 (4,900원)</h2>
           
