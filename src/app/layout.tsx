@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import "./globals.css";
 import Footer from "@/components/Footer";
 
@@ -16,6 +17,14 @@ export default function RootLayout({
   return (
     <html lang="ko">
       <body className="flex flex-col min-h-screen">
+        <header className="w-full bg-white border-b border-gray-200">
+          <div className="max-w-4xl mx-auto px-6 py-4 flex justify-between items-center">
+            <Link href="/" className="font-bold text-gray-900 text-lg">Korean Resume AI</Link>
+            <nav>
+              <Link href="/blog" className="text-gray-600 hover:text-gray-900 font-medium text-sm">취업 꿀팁 블로그</Link>
+            </nav>
+          </div>
+        </header>
         {children}
         <Footer />
       </body>

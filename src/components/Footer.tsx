@@ -73,7 +73,7 @@ export default function Footer() {
     refund: (
       <div>
         <p className="mb-2 text-red-600 font-semibold">디지털 콘텐츠 특성상 AI 생성이 시작된 이후에는 단순 변심에 의한 환불이 불가합니다.</p>
-        <p>단, 서비스 시스템 오류로 인해 결제 후 질문이나 자소서가 정상적으로 생성되지 않은 경우, 고객센터(support@korean-resume-ai.com)로 문의해주시면 확인 후 100% 환불 처리해 드립니다.</p>
+        <p>단, 서비스 시스템 오류로 인해 결제 후 질문이나 자소서가 정상적으로 생성되지 않은 경우, 고객센터(ksg0611@gmail.com)로 문의해주시면 확인 후 100% 환불 처리해 드립니다.</p>
       </div>
     )
   };
@@ -86,7 +86,7 @@ export default function Footer() {
             <p className="font-semibold text-gray-700 mb-1">에스지유닛 (SG UNIT)</p>
             <p>사업자등록번호: 476-12-03191</p>
             <p>주소: 경상북도 예천군 호명읍 새움3로 7, 103동 501호</p>
-            <p>연락처: 010-4522-6906 | 이메일: support@korean-resume-ai.com</p>
+            <p>연락처: 010-4522-6906 | 이메일: ksg0611@gmail.com</p>
           </div>
           
           <div className="flex gap-4 text-sm text-gray-600 mt-4 md:mt-0">
