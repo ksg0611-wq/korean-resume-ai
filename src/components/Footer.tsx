@@ -83,10 +83,10 @@ export default function Footer() {
       <div className="max-w-4xl mx-auto px-6 py-8">
         <div className="flex flex-col md:flex-row justify-between items-center gap-4">
           <div className="text-center md:text-left text-gray-500 text-sm leading-relaxed">
-            <p className="font-semibold text-gray-700 mb-1">Korean Resume AI</p>
-            <p>대표자 / 운영자: [운영자 성명 입력]</p>
-            <p>문의 이메일: support@korean-resume-ai.com</p>
-            <p>사업자 정보: [개인 개발 프로젝트 / 사업자등록번호 기재 영역]</p>
+            <p className="font-semibold text-gray-700 mb-1">에스지유닛 (SG UNIT)</p>
+            <p>사업자등록번호: 476-12-03191</p>
+            <p>주소: 경상북도 예천군 호명읍 새움3로 7, 103동 501호</p>
+            <p>연락처: 010-4522-6906 | 이메일: support@korean-resume-ai.com</p>
           </div>
           
           <div className="flex gap-4 text-sm text-gray-600 mt-4 md:mt-0">
