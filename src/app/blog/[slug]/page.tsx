@@ -40,6 +40,9 @@ export default function BlogPost({ params }: { params: { slug: string } }) {
   const firstHalf = paragraphs.slice(0, midPoint).join('\n\n');
   const secondHalf = paragraphs.slice(midPoint).join('\n\n');
 
+  // 수익 창출(광고) 승인 여부를 제어하는 플래그
+  const ADS_APPROVED = process.env.NEXT_PUBLIC_ADS_APPROVED === 'true';
+
   return (
     <div className="max-w-3xl mx-auto px-4 py-12 flex-1 flex flex-col">
       <Link href="/blog" className="text-blue-600 hover:underline mb-8 inline-block font-medium">
@@ -55,10 +58,11 @@ export default function BlogPost({ params }: { params: { slug: string } }) {
           {firstHalf}
         </div>
 
-        {/* 💡 In-article 애드센스 광고 Placeholder (애드센스 심사 통과 전까지 숨김 처리) */}
-        <div id="adsense-placeholder" className="hidden" aria-hidden="true">
-          {/* 실제 애드센스 스크립트가 들어갈 위치 */}
-        </div>
+        {ADS_APPROVED && (
+          <div className="my-12 py-8 bg-gray-50 flex items-center justify-center text-gray-400 rounded-lg">
+            {/* 승인 완료 시 스크립트 삽입 영역 */}
+          </div>
+        )}
 
         <div className="text-gray-700 leading-loose whitespace-pre-wrap text-lg">
           {secondHalf}
