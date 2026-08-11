@@ -51,14 +51,13 @@ export default function BlogPost({ params }: { params: { slug: string } }) {
         <h1 className="text-3xl md:text-4xl font-bold mb-4 text-gray-900 leading-tight">{post.title}</h1>
         <p className="text-gray-400 text-sm mb-10 border-b pb-6">{post.date}</p>
         
-        <div className="text-gray-700 leading-loose whitespace-pre-wrap text-lg">
+        <div className="text-gray-700 leading-loose whitespace-pre-wrap text-lg mb-8">
           {firstHalf}
         </div>
 
-        {/* 💡 In-article 애드센스 광고 Placeholder */}
-        <div className="my-12 py-8 bg-gray-50 border border-dashed border-gray-300 flex items-center justify-center text-gray-400 rounded-lg">
+        {/* 💡 In-article 애드센스 광고 Placeholder (애드센스 심사 통과 전까지 숨김 처리) */}
+        <div id="adsense-placeholder" className="hidden" aria-hidden="true">
           {/* 실제 애드센스 스크립트가 들어갈 위치 */}
-          <span className="text-sm">In-article AdSense Placeholder</span>
         </div>
 
         <div className="text-gray-700 leading-loose whitespace-pre-wrap text-lg">
