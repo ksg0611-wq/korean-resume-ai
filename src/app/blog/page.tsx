@@ -24,7 +24,7 @@ export default function BlogIndex() {
       </div>
       
       <div className="grid gap-6">
-        {blogPosts.map((post) => (
+        {[...blogPosts].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map((post) => (
           <Link key={post.slug} href={`/blog/${post.slug}`}>
             <div className="border border-gray-200 rounded-xl p-6 hover:shadow-lg hover:border-blue-300 transition duration-300 cursor-pointer bg-white h-full flex flex-col">
               <h2 className="text-xl font-bold mb-2 text-gray-800">{post.title}</h2>
