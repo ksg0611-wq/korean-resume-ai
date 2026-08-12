@@ -77,7 +77,7 @@ export default function BlogPost({ params }: { params: { slug: string } }) {
           방금 읽으신 완벽한 구조가 적용된 자소서 초안을 AI가 1분 만에 알아서 작성해 드립니다. 
           백지에서 시작하지 마세요.
         </p>
-        <Link href="/" className="inline-block bg-blue-600 text-white font-bold py-4 px-10 rounded-xl hover:bg-blue-700 hover:shadow-lg transition-all duration-200 transform hover:-translate-y-1">
+        <Link href={post.ctaTarget || "/"} className="inline-block bg-blue-600 text-white font-bold py-4 px-10 rounded-xl hover:bg-blue-700 hover:shadow-lg transition-all duration-200 transform hover:-translate-y-1">
           👉 AI 자소서 무료로 생성해보기
         </Link>
       </div>
