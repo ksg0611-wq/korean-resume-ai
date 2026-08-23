@@ -4,10 +4,13 @@ import { blogPosts } from '@/lib/blogData';
 
 export async function generateMetadata(): Promise<Metadata> {
   return {
-    title: '취업 가이드 블로그 | Korean Resume AI',
+    title: '취업 가이드 블로그 | Korea Resume AI',
     description: '서류 통과부터 면접까지, 검증된 취업 꿀팁과 합격하는 자소서 작성 가이드를 제공합니다.',
+    alternates: {
+      canonical: 'https://korea-resume.com/blog',
+    },
     openGraph: {
-      title: '취업 가이드 블로그 | Korean Resume AI',
+      title: '취업 가이드 블로그 | Korea Resume AI',
       description: '서류 통과부터 면접까지, 검증된 취업 꿀팁과 합격하는 자소서 작성 가이드를 제공합니다.',
       type: 'website',
       url: '/blog',

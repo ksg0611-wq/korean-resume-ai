@@ -9,13 +9,16 @@ export async function generateMetadata({ params }: { params: { slug: string } })
   
   if (!post) {
     return {
-      title: 'Post Not Found | Korean Resume AI',
+      title: 'Post Not Found | Korea Resume AI',
     };
   }
 
   return {
-    title: `${post.title} | Korean Resume AI`,
+    title: `${post.title} | Korea Resume AI`,
     description: post.excerpt,
+    alternates: {
+      canonical: `https://korea-resume.com/blog/${post.slug}`,
+    },
     openGraph: {
       title: post.title,
       description: post.excerpt,
