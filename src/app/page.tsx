@@ -67,8 +67,20 @@ export default function Home() {
       setResumePrompt(savedDraft);
     }
 
-    // 자동 생성 체크 (결제 성공 후 리다이렉트 시)
+    // 채용공고 등에서 공고명(jobTitle) 파라미터가 전달된 경우
     const urlParams = new URLSearchParams(window.location.search);
+    const jobTitleParam = urlParams.get("jobTitle") || urlParams.get("job");
+    if (jobTitleParam) {
+      const template = `[지원 기업/공고: ${jobTitleParam}]\n\n1. 지원 동기 및 입사 후 포부:\n- \n\n2. 주요 직무 역량 및 프로젝트/경험:\n- \n`;
+      setResumePrompt(template);
+      localStorage.setItem("resumeDraft", template);
+      setTimeout(() => {
+        const el = document.getElementById("resume-form");
+        if (el) el.scrollIntoView({ behavior: "smooth" });
+      }, 300);
+    }
+
+    // 자동 생성 체크 (결제 성공 후 리다이렉트 시)
     const successOrderId = urlParams.get("orderId");
     if (successOrderId && savedDraft) {
       window.history.replaceState({}, document.title, "/");

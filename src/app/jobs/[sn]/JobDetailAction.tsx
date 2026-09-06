@@ -32,15 +32,23 @@ export default function JobDetailAction({
           AI 자소서 작성하기 (사전 오픈 알림)
         </button>
 
+        {/* 메인 작성기에서 직접 작성 */}
+        <a
+          href={`/?jobTitle=${encodeURIComponent(`[${instName}] ${jobTitle}`)}`}
+          className="py-3.5 px-5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold text-sm transition-colors text-center flex items-center justify-center gap-1"
+        >
+          기본 작성기에서 쓰기 ↗
+        </a>
+
         {/* 원문 공고 보기 */}
         {srcUrl && (
           <a
             href={srcUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="py-3.5 px-6 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-800 font-semibold text-sm transition-colors text-center"
+            className="py-3.5 px-5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-800 font-semibold text-sm transition-colors text-center"
           >
-            알리오 공식 공고 원문 보기 ↗
+            공식 공고 원문 ↗
           </a>
         )}
       </div>

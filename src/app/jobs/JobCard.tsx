@@ -113,14 +113,21 @@ export default function JobCard({ job, isRecommended }: JobCardProps) {
         </div>
       </div>
 
-      {/* Footer Meta */}
-      <div className="pt-3 border-t border-gray-100 flex items-center justify-between text-xs text-gray-500">
-        <span>접수 마감: {toDateString(job.end_date) || '상시'}</span>
-        {job.recruit_count ? (
-          <span className="font-medium text-gray-700">{job.recruit_count}명 채용</span>
-        ) : (
-          <span className="text-gray-400">0명/미정</span>
-        )}
+      {/* Footer Meta & Action CTA */}
+      <div className="pt-3 border-t border-gray-100 flex items-center justify-between gap-2 text-xs">
+        <div className="flex items-center gap-1.5 text-gray-500 min-w-0">
+          <span className="shrink-0">{toDateString(job.end_date) || '상시'} 마감</span>
+          <span className="text-gray-300">·</span>
+          {job.recruit_count ? (
+            <span className="font-medium text-gray-700 shrink-0">{job.recruit_count}명 채용</span>
+          ) : (
+            <span className="text-gray-400 shrink-0">0명/미정</span>
+          )}
+        </div>
+
+        <span className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-50 text-blue-600 font-semibold text-xs transition-colors hover:bg-blue-600 hover:text-white group-hover:bg-blue-600 group-hover:text-white shrink-0">
+          맞춤 자소서 쓰기 →
+        </span>
       </div>
     </Link>
   );
