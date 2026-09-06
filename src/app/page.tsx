@@ -214,6 +214,10 @@ export default function Home() {
     setError("");
     setResult("");
 
+    setTimeout(() => {
+      document.getElementById("generation-progress-banner")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }, 50);
+
     try {
       const payload: any = { 
         jobTitle: selectedJobTitle.trim() ? selectedJobTitle.trim() : "일반 직무",

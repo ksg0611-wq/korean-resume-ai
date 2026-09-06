@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState, useEffect, useRef, Suspense } from "react";
 import { loadPaymentWidget, PaymentWidgetInstance } from "@tosspayments/payment-widget-sdk";
@@ -202,6 +202,10 @@ function InterviewContent() {
     setError("");
     setResult("");
 
+    setTimeout(() => {
+      document.getElementById("generation-progress-banner")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }, 50);
+
     try {
       const payload: any = {
         jobCategory,
@@ -333,6 +337,7 @@ function InterviewContent() {
               onFreeGenerate={() => handleGenerate()}
               freeButtonText="먼저 무료로 생성하기 (일 1회 제한)"
               generatingText="AI 면접 질문 생성 중..."
+              generatingBannerText="AI가 자소서를 바탕으로 실전 압박 질문을 작성 중입니다 (보통 15~20초 소요)"
               widgetContainerId="interview-payment-widget"
               agreementContainerId="interview-agreement"
             />

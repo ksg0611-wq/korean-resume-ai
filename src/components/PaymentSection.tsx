@@ -23,6 +23,7 @@ export interface PaymentSectionProps {
   onFreeGenerate: () => void;
   freeButtonText?: string;
   generatingText?: string;
+  generatingBannerText?: string;
   widgetContainerId?: string;
   agreementContainerId?: string;
 }
@@ -47,59 +48,13 @@ export default function PaymentSection({
   isGenerating,
   onFreeGenerate,
   freeButtonText = "먼저 무료로 생성하기 (일 2회 제한)",
-  generatingText = "AI 생성 중...",
+  generatingText = "AI 생성 진행 중...",
+  generatingBannerText = "AI가 입력 경험을 바탕으로 맞춤 문장을 작성 중입니다 (보통 10~15초 소요)",
   widgetContainerId = "payment-widget",
   agreementContainerId = "agreement",
 }: PaymentSectionProps) {
   const displayTitle = title || `결제 및 생성 (${priceDisplay}원)`;
   const displayPaidText = paidButtonText || `${priceDisplay}원 결제하고 완성하기`;
-
-  // ── 생성 대기 단계별 진행 상태 관리 (무한 대기 방지 및 체감 속도 개선) ──
-  const [generationStep, setGenerationStep] = React.useState(0);
-  const [progressPercent, setProgressPercent] = React.useState(15);
-
-  React.useEffect(() => {
-    if (!isGenerating) {
-      setGenerationStep(0);
-      setProgressPercent(15);
-      return;
-    }
-
-    const startTime = Date.now();
-    const interval = setInterval(() => {
-      const elapsedSec = (Date.now() - startTime) / 1000;
-      if (elapsedSec < 3.5) {
-        setGenerationStep(1);
-        setProgressPercent(Math.min(40, Math.floor(15 + elapsedSec * 7)));
-      } else if (elapsedSec < 8.5) {
-        setGenerationStep(2);
-        setProgressPercent(Math.min(75, Math.floor(40 + (elapsedSec - 3.5) * 7)));
-      } else if (elapsedSec < 13.5) {
-        setGenerationStep(3);
-        setProgressPercent(Math.min(92, Math.floor(75 + (elapsedSec - 8.5) * 3.4)));
-      } else {
-        setGenerationStep(4);
-        setProgressPercent(96);
-      }
-    }, 200);
-
-    return () => clearInterval(interval);
-  }, [isGenerating]);
-
-  const getStepText = () => {
-    switch (generationStep) {
-      case 1:
-        return "1단계: 입력 경험 및 직무 맥락 분석 중...";
-      case 2:
-        return "2단계: STAR 구조 심층 분석 및 문장 재구성 중... (약 10~15초 소요)";
-      case 3:
-        return "3단계: 비즈니스 임팩트 수치화 및 논리 검증 중...";
-      case 4:
-        return "4단계: 최종 리포트 서식 정리 중 (잠시만 기다려주세요)...";
-      default:
-        return "AI 심층 생성 준비 중...";
-    }
-  };
 
   return (
     <section className="bg-white p-6 sm:p-8 rounded-2xl shadow-sm border border-gray-200 flex flex-col gap-5">
@@ -185,32 +140,22 @@ export default function PaymentSection({
         </div>
       )}
 
-      {/* 생성 대기 진행 상태 안내 (무한 대기 방지 단계별 진행 문구 및 프로그레스 바) */}
+      {/* 생성 대기 진행 상태 안내 (불확정 왕복 프로그레스 바) */}
       {isGenerating && (
-        <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl flex flex-col gap-2.5 animate-fadeIn">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <svg className="animate-spin h-4 w-4 text-blue-600 shrink-0" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
-              <span className="text-xs sm:text-sm font-bold text-blue-900">
-                {getStepText()}
-              </span>
-            </div>
-            <span className="text-[11px] font-semibold text-blue-700 bg-blue-100/80 px-2.5 py-0.5 rounded-full shrink-0">
-              약 10~15초 소요
+        <div id="generation-progress-banner" className="p-4 bg-blue-50 border border-blue-200 rounded-xl flex flex-col gap-3 animate-fadeIn">
+          <div className="flex items-center gap-2">
+            <svg className="animate-spin h-4 w-4 text-blue-600 shrink-0" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <span className="text-xs sm:text-sm font-bold text-blue-900 leading-snug">
+              {generatingBannerText}
             </span>
           </div>
-          <div className="w-full bg-blue-200/60 rounded-full h-1.5 overflow-hidden">
-            <div
-              className="bg-blue-600 h-1.5 rounded-full transition-all duration-300 ease-out"
-              style={{ width: `${progressPercent}%` }}
-            />
+          {/* 불확정(Indeterminate) 왕복 애니메이션 프로그레스 바 */}
+          <div className="w-full bg-blue-200/60 rounded-full h-1.5 overflow-hidden relative">
+            <div className="bg-blue-600 rounded-full animate-indeterminate" />
           </div>
-          <p className="text-[11px] text-blue-700 leading-relaxed">
-            Gemini 3.8 Flash가 실무진 면접관·채용담당자 관점에서 논리 구조와 비즈니스 수치를 정밀 교정하고 있습니다.
-          </p>
         </div>
       )}
 
@@ -254,7 +199,7 @@ export default function PaymentSection({
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
             </svg>
-            <span>{getStepText()}</span>
+            <span>{generatingText}</span>
           </span>
         ) : (
           freeButtonText
