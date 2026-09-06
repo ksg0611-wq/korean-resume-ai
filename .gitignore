@@ -35,5 +35,11 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# local database / scratch data
+/data/
+check.mjs
+scripts/*.json
+scripts/*.md
+
 .vercel
 .env*

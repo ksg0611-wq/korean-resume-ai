@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import Link from "next/link";
 import { loadPaymentWidget, PaymentWidgetInstance } from "@tosspayments/payment-widget-sdk";
 import PreviewCard from "@/components/PreviewCard";
 import FAQAccordion from "@/components/FAQAccordion";
@@ -21,8 +22,44 @@ export default function Home() {
   const [isWidgetReady, setIsWidgetReady] = useState(false);
   const [isRedirecting, setIsRedirecting] = useState(false);
   
+  // 결제 버튼 처리 상태: 'idle' | 'processing' | 'timeout' | 'error'
+  const [paymentState, setPaymentState] = useState<"idle" | "processing" | "timeout" | "error">("idle");
+  const [paymentTimeoutMsg, setPaymentTimeoutMsg] = useState("");
+
   const paymentWidgetRef = useRef<PaymentWidgetInstance | null>(null);
   const paymentMethodsWidgetRef = useRef<any>(null);
+  const timeoutTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const isWidgetReadyRef = useRef(false);
+
+  // 동기화 ref
+  useEffect(() => {
+    isWidgetReadyRef.current = isWidgetReady;
+  }, [isWidgetReady]);
+
+  const initPaymentWidget = async () => {
+    try {
+      setError("");
+      setPaymentTimeoutMsg("");
+      const paymentWidget = await loadPaymentWidget(clientKey, customerKey);
+      paymentWidgetRef.current = paymentWidget;
+      
+      const paymentMethodsWidget = paymentWidget.renderPaymentMethods(
+        "#payment-widget",
+        { value: PRICE },
+        { variantKey: "DEFAULT" }
+      );
+      paymentWidget.renderAgreement("#agreement", { variantKey: "AGREEMENT" });
+      paymentMethodsWidget.on("ready", () => {
+        setIsWidgetReady(true);
+        isWidgetReadyRef.current = true;
+      });
+      paymentMethodsWidgetRef.current = paymentMethodsWidget;
+    } catch (err: any) {
+      console.error("결제 위젯 초기화 실패:", err);
+      setPaymentState("error");
+      setError("결제 모듈을 불러오지 못했습니다. 네트워크를 확인 후 다시 시도해 주세요.");
+    }
+  };
 
   useEffect(() => {
     const savedDraft = localStorage.getItem("resumeDraft");
@@ -34,46 +71,40 @@ export default function Home() {
     const urlParams = new URLSearchParams(window.location.search);
     const successOrderId = urlParams.get("orderId");
     if (successOrderId && savedDraft) {
-      // URL 파라미터 지우기
       window.history.replaceState({}, document.title, "/");
       handleGenerate(successOrderId, savedDraft);
     }
 
-    // 결제 위젯 초기화
-    (async () => {
-      try {
-        console.log("Toss Client Key:", clientKey);
-        const paymentWidget = await loadPaymentWidget(clientKey, customerKey);
-        paymentWidgetRef.current = paymentWidget;
-        
-        const paymentMethodsWidget = paymentWidget.renderPaymentMethods(
-          "#payment-widget",
-          { value: PRICE },
-          { variantKey: "DEFAULT" }
-        );
-        paymentWidget.renderAgreement("#agreement", { variantKey: "AGREEMENT" });
-        paymentMethodsWidget.on("ready", () => {
-          setIsWidgetReady(true);
-        });
-        paymentMethodsWidgetRef.current = paymentMethodsWidget;
-      } catch (err) {
-        console.error("결제 위젯 초기화 실패:", err);
-        setError("결제 모듈을 불러오지 못했습니다. Client Key를 확인해주세요.");
+    initPaymentWidget();
+
+    return () => {
+      if (timeoutTimerRef.current) {
+        clearTimeout(timeoutTimerRef.current);
       }
-    })();
+    };
   }, []);
 
   const handlePromptChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setResumePrompt(e.target.value);
     localStorage.setItem("resumeDraft", e.target.value);
+    if (error) setError("");
   };
 
-  const requestPayment = async () => {
-    if (!agreedToRefundPolicy || !isWidgetReady) return;
-    
+  const scrollToForm = () => {
+    const el = document.getElementById("resume-form");
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth" });
+      const textarea = document.getElementById("resume-textarea");
+      if (textarea) textarea.focus();
+    }
+  };
+
+  // 실제 결제창 요청 실행 함수
+  const executePaymentRequest = async () => {
     const paymentWidget = paymentWidgetRef.current;
     if (!paymentWidget) {
-      setError("결제 위젯이 로드되지 않았습니다.");
+      setPaymentState("error");
+      setError("결제 위젯이 준비되지 않았습니다. 다시 시도해 주세요.");
       return;
     }
 
@@ -86,19 +117,95 @@ export default function Home() {
         failUrl: window.location.origin + "/payments/fail",
       });
     } catch (err: any) {
-      setError(err.message || "결제 요청 중 오류가 발생했습니다.");
+      setPaymentState("idle");
+      // 사용자 창 닫기 등 취소는 일반 에러 표시
+      if (err.code !== "USER_CANCEL") {
+        setError(err.message || "결제 요청 중 오류가 발생했습니다.");
+      }
     }
   };
 
+  // 결제 버튼 클릭 핸들러 (10초 타임아웃 및 무한 스피너 방지 Fail-Safe 탑재)
+  const handlePaymentClick = async () => {
+    setError("");
+    setPaymentTimeoutMsg("");
+
+    // 1. 사전 유효성 검증
+    if (!resumePrompt.trim()) {
+      setError("자기소개서 작성 내용을 먼저 입력해 주세요.");
+      scrollToForm();
+      return;
+    }
+
+    if (!agreedToRefundPolicy) {
+      setError("결제 진행을 위해 환불 불가 정책에 동의해 주세요.");
+      const checkbox = document.getElementById("refund-agree");
+      if (checkbox) checkbox.focus();
+      return;
+    }
+
+    // 2. 이미 SDK 위젯이 준비된 경우 -> 즉시 결제 실행
+    if (isWidgetReady && paymentWidgetRef.current) {
+      setPaymentState("idle");
+      await executePaymentRequest();
+      return;
+    }
+
+    // 3. 위젯이 아직 준비되지 않은 경우 -> 스피너 가동 및 10초 타임아웃 안전장치 시작
+    setPaymentState("processing");
+
+    // 이전 타이머 정리
+    if (timeoutTimerRef.current) {
+      clearTimeout(timeoutTimerRef.current);
+    }
+
+    // 폴링 인터벌로 준비 완료 감지 (최대 10초)
+    const startTime = Date.now();
+    const checkInterval = setInterval(() => {
+      if (isWidgetReadyRef.current && paymentWidgetRef.current) {
+        clearInterval(checkInterval);
+        if (timeoutTimerRef.current) clearTimeout(timeoutTimerRef.current);
+        setPaymentState("idle");
+        executePaymentRequest();
+      }
+    }, 200);
+
+    // 10초 타임아웃 타이머
+    timeoutTimerRef.current = setTimeout(() => {
+      clearInterval(checkInterval);
+      // 아직도 준비되지 않은 경우 스피너 중단 & 타임아웃 상태 전환
+      if (!isWidgetReadyRef.current) {
+        setPaymentState("timeout");
+        setPaymentTimeoutMsg(
+          "결제 모듈 연결에 시간이 소요되고 있습니다. 네트워크 상태를 확인하시거나 아래 [결제 다시 시도] 버튼을 눌러주세요."
+        );
+      }
+    }, 10000);
+  };
+
+  const handleRetryPayment = () => {
+    setPaymentState("idle");
+    setPaymentTimeoutMsg("");
+    setError("");
+    initPaymentWidget();
+  };
+
   const handleGenerate = async (paidOrderId?: string, promptText?: string) => {
+    const textToUse = (promptText || resumePrompt).trim();
+    if (!textToUse) {
+      setError("자기소개서 작성 내용을 입력해 주세요.");
+      scrollToForm();
+      return;
+    }
+
     setIsGenerating(true);
     setError("");
     setResult("");
 
     try {
       const payload: any = { 
-        jobTitle: "일반 직무", // 임시 직무
-        memo: promptText || resumePrompt,
+        jobTitle: "일반 직무",
+        memo: textToUse,
         isFree: !paidOrderId,
       };
       
@@ -116,18 +223,22 @@ export default function Home() {
 
       if (!res.ok) {
         if (res.status === 429) {
-          throw new Error("무료 생성 횟수가 초과되었습니다.");
+          throw new Error("무료 생성 횟수(일 3회)가 초과되었습니다.");
         }
         if (res.status === 403) {
-          throw new Error("결제 정보가 유효하지 않습니다.");
+          throw new Error("결제 정보가 유효하지 않거나 사용 횟수를 모두 소진했습니다.");
         }
-        throw new Error("생성 중 오류가 발생했습니다.");
+        throw new Error("생성 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.");
       }
 
       const data = await res.json();
       setResult(data.text);
+      // 결과 영역으로 부드럽게 스크롤
+      setTimeout(() => {
+        document.getElementById("result-section")?.scrollIntoView({ behavior: "smooth" });
+      }, 100);
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message || "오류가 발생했습니다.");
     } finally {
       setIsGenerating(false);
     }
@@ -157,129 +268,294 @@ export default function Home() {
   };
 
   return (
-    <main className="flex-1 flex flex-col items-center p-8 sm:p-24 bg-gray-50 text-gray-900">
-      <div className="max-w-2xl w-full flex flex-col gap-8">
-        <header className="text-center">
-          <h1 className="text-3xl sm:text-4xl font-bold mb-4">STAR 프레임워크 기반 AI 자소서 & 면접 꼬리질문 시뮬레이터</h1>
-          <p className="text-lg text-gray-600 mb-6">
-            STAR 프레임워크와 직무별 키워드 매핑 로직을 적용해 완벽한 자소서 초안을 만듭니다.
-          </p>
-          <PreviewCard />
-        </header>
+    <main className="flex-1 bg-gray-50 text-gray-900">
+      <div className="max-w-6xl w-full mx-auto px-3.5 sm:px-6 lg:px-8 py-6 sm:py-12 flex flex-col gap-8 sm:gap-10">
+        
+        {/* ========================================================================= */}
+        {/* [과업 1: 메인 2단 전환 최적화 히어로 영역] */}
+        {/* 데스크톱 md 이상: 2단 그리드 (좌: 가치제안/가격/CTA/신뢰, 우: Before/After) */}
+        {/* 모바일: 1단 스택 (flex-col) 및 break-keep */}
+        {/* ========================================================================= */}
+        <section className="grid grid-cols-1 md:grid-cols-2 gap-8 lg:gap-12 items-start">
+          {/* 좌측 영역: 가치 제안 및 구매 전환 */}
+          <div className="flex flex-col text-left break-keep">
+            {/* 상단 알약 배지 */}
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-bold border border-emerald-200 self-start mb-4">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span>공공기관 채용공고 30건 연동</span>
+            </div>
 
-        <section className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-          <label htmlFor="resume-textarea" className="block text-sm font-medium text-gray-700 mb-2">
-            자기소개서 작성 내용 (상황, 과제, 행동, 결과를 자유롭게 작성해주세요)
-          </label>
+            {/* 헤드라인 */}
+            <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-gray-900 tracking-tight leading-[1.2] mb-3">
+              막막한 한 줄을<br />
+              <span className="text-blue-600">합격하는 자소서</span>로
+            </h1>
+
+            {/* 서브카피 */}
+            <p className="text-base sm:text-lg text-gray-600 mb-6 leading-relaxed">
+              메모만 적어주세요. STAR 기법으로 3분 안에 완성됩니다.
+            </p>
+
+            {/* 가격 앵커링 박스 */}
+            <div className="bg-white border border-blue-100 rounded-2xl p-5 shadow-sm mb-6 flex flex-col gap-2.5">
+              <div className="flex flex-wrap items-baseline gap-2.5">
+                <span className="text-sm sm:text-base text-gray-400 line-through">
+                  시중 컨설팅 50,000원~
+                </span>
+                <span className="text-3xl sm:text-4xl font-extrabold text-blue-600 tracking-tight">
+                  {PRICE_DISPLAY}원
+                </span>
+                <span className="text-xs font-semibold text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
+                  단건 결제
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5 text-xs sm:text-sm font-semibold text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-200 self-start">
+                <svg className="w-4 h-4 text-emerald-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                </svg>
+                <span>1회 결제 · 3회 재생성 포함</span>
+              </div>
+            </div>
+
+            {/* 메인 CTA 버튼 (상시 활성화 파란색) */}
+            <div className="flex flex-col gap-2.5">
+              <button
+                onClick={scrollToForm}
+                className="w-full py-4 px-6 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold text-base sm:text-lg rounded-xl shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <span>지금 자소서 만들기</span>
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                </svg>
+              </button>
+
+              {/* 서브 액션 텍스트 링크 */}
+              <button
+                onClick={scrollToForm}
+                className="text-xs sm:text-sm text-gray-500 hover:text-blue-600 underline font-medium text-center py-1 transition-colors cursor-pointer"
+              >
+                먼저 무료로 1회 체험하기
+              </button>
+            </div>
+
+            {/* 신뢰 뱃지 3종 (결제 근처 승격) */}
+            <div className="mt-6 sm:mt-8 pt-6 border-t border-gray-200/80 flex flex-row gap-2 text-center w-full">
+              <div className="flex-1 flex flex-col items-center justify-center gap-1 py-2 px-1 bg-white rounded-xl border border-gray-100 shadow-xs">
+                <svg className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                </svg>
+                <span className="font-bold text-gray-900 text-[11px] sm:text-xs">토스페이먼츠</span>
+                <span className="text-[9.5px] sm:text-[11px] text-gray-500">안전결제</span>
+              </div>
+
+              <div className="flex-1 flex flex-col items-center justify-center gap-1 py-2 px-1 bg-white rounded-xl border border-gray-100 shadow-xs">
+                <svg className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                </svg>
+                <span className="font-bold text-gray-900 text-[11px] sm:text-xs">사업자등록</span>
+                <span className="text-[9.5px] sm:text-[11px] text-gray-500">476-12-03191</span>
+              </div>
+
+              <div className="flex-1 flex flex-col items-center justify-center gap-1 py-2 px-1 bg-white rounded-xl border border-gray-100 shadow-xs">
+                <svg className="w-4 h-4 sm:w-5 sm:h-5 text-indigo-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+                <span className="font-bold text-gray-900 text-[11px] sm:text-xs">서버 미저장</span>
+                <span className="text-[9.5px] sm:text-[11px] text-gray-500">즉시 파기</span>
+              </div>
+            </div>
+          </div>
+
+          {/* 우측 영역: Before / After 증거 시각화 */}
+          <div className="w-full">
+            <PreviewCard />
+          </div>
+        </section>
+
+        {/* ========================================================================= */}
+        {/* [자소서 입력 폼 섹션] */}
+        {/* ========================================================================= */}
+        <section id="resume-form" className="scroll-mt-20 bg-white p-6 sm:p-8 rounded-2xl shadow-sm border border-gray-200">
+          <div className="flex items-center justify-between mb-3">
+            <label htmlFor="resume-textarea" className="block text-base font-bold text-gray-900">
+              자기소개서 작성 내용 <span className="text-blue-600">*</span>
+            </label>
+            <span className="text-xs text-gray-400 font-medium">
+              {resumePrompt.length} / 1000자
+            </span>
+          </div>
+          <p className="text-xs text-gray-500 mb-3 break-keep">
+            완벽한 문장이 아니어도 괜찮습니다. 생각나는 단어나 활동 메모만 편하게 적어주시면 AI가 STAR(상황·과제·행동·결과) 기법으로 완성합니다.
+          </p>
           <textarea
             id="resume-textarea"
-            className="w-full h-48 p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition resize-none"
-            placeholder="예: 마케팅 인턴으로 근무하며... (완벽한 문장이 아니어도 괄찮습니다. 생각나는 단어나 핵심 메모만 편하게 적어주시면 AI가 알아서 STAR 기법으로 완성해 드립니다.)"
+            className="w-full h-44 p-4 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition resize-none text-sm leading-relaxed"
+            placeholder="예: 마케팅 인턴으로 근무하며 SNS 콘텐츠 기획을 담당함. 초기에 클릭률이 낮아서 A/B 테스트를 도입하고 타겟 고객을 분석했음. 그 결과 조회수가 2배 늘고 이벤트 참여율이 30% 상승함."
             maxLength={1000}
             value={resumePrompt}
             onChange={handlePromptChange}
           ></textarea>
-          <div className="flex justify-end mt-1">
-            <span className="text-xs text-gray-400">{resumePrompt.length} / 1000자</span>
-          </div>
         </section>
 
-        {/* 마케팅/가치 제안 블록 */}
-        <section className="bg-blue-50 border border-blue-100 rounded-lg p-8 flex flex-col gap-4">
-          {/* 가격 앵커링 */}
-          <p className="text-sm sm:text-base font-semibold text-blue-900 leading-relaxed">
-            💡 시중 자소서 컨설팅 5~10만원대 → 커피 한 잔 값({PRICE_DISPLAY}원)으로 STAR 기법 기반 전문 초안을 즉시 받아보세요
-          </p>
-
-          {/* 타깃 추천 체크리스트 */}
-          <div>
-            <p className="text-sm font-semibold text-gray-800 mb-3">이런 분께 추천합니다</p>
-            <ul className="flex flex-col gap-2">
-              {[
-                "자소서를 뭐부터 고쳐야 할지 막막하신 분",
-                "STAR 기법은 알지만 내 경험에 어떻게 적용할지 모르시는 분",
-                "면접 전 예상 질문까지 한 번에 준비하고 싶으신 분",
-              ].map((item) => (
-                <li key={item} className="flex items-start gap-2 text-sm text-gray-700">
-                  <span className="mt-0.5 flex-shrink-0 text-blue-600 font-bold">✓</span>
-                  <span>{item}</span>
-                </li>
-              ))}
-            </ul>
+        {/* ========================================================================= */}
+        {/* [결제 및 생성 섹션] */}
+        {/* ========================================================================= */}
+        <section className="bg-white p-6 sm:p-8 rounded-2xl shadow-sm border border-gray-200 flex flex-col gap-5">
+          <div className="flex items-center justify-between border-b border-gray-100 pb-4">
+            <div>
+              <h2 className="text-lg sm:text-xl font-bold text-gray-900">
+                결제 및 생성 ({PRICE_DISPLAY}원)
+              </h2>
+              <p className="text-xs text-gray-500 mt-0.5">
+                토스페이먼츠 보안 모듈을 통해 안전하게 결제됩니다.
+              </p>
+            </div>
+            <span className="text-xs font-bold text-blue-700 bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-100">
+              단건 결제
+            </span>
           </div>
-        </section>
-
-        <section className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 flex flex-col gap-4">
-          <h2 className="text-xl font-semibold">결제 및 생성 ({PRICE_DISPLAY}원)</h2>
           
+          {/* Toss Payments 위젯 컨테이너 */}
           <div id="payment-widget" className="w-full"></div>
           <div id="agreement" className="w-full"></div>
 
-          <label htmlFor="refund-agree" className="flex items-start gap-3 cursor-pointer p-3 bg-gray-50 border border-gray-200 rounded-md">
+          {/* 환불 정책 동의 체크박스 */}
+          <label htmlFor="refund-agree" className="flex items-start gap-3 cursor-pointer p-4 bg-gray-50 border border-gray-200 rounded-xl hover:bg-gray-100/70 transition-colors">
             <input
               id="refund-agree"
               type="checkbox"
-              className="mt-1 w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500 flex-shrink-0"
+              className="mt-0.5 w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500 flex-shrink-0 cursor-pointer"
               checked={agreedToRefundPolicy}
               onChange={(e) => setAgreedToRefundPolicy(e.target.checked)}
             />
-            <span className="text-sm text-gray-700">
-              [필수] 결제 완료 시 즉시 AI 생성이 시작되는 디지털 콘텐츠 특성상, 생성 시작 후 단순 변심에 의한 환불이 불가함에 동의합니다.
+            <span className="text-xs sm:text-sm text-gray-700 leading-relaxed break-keep">
+              <strong>[필수]</strong> 결제 완료 시 즉시 AI 생성이 시작되는 디지털 콘텐츠 특성상, 생성 시작 후 단순 변심에 의한 환불이 불가함에 동의합니다. (시스템 오류 시 100% 전액 환불)
             </span>
           </label>
 
-          <div className="flex flex-col sm:flex-row justify-center gap-4 text-sm font-semibold text-green-700 bg-green-50 py-3 px-4 rounded-md border border-green-100">
-            <span className="flex items-center justify-center gap-1">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+          {/* 안전 결제 보장 바 */}
+          <div className="flex flex-col sm:flex-row justify-center gap-3 sm:gap-6 text-xs sm:text-sm font-semibold text-emerald-700 bg-emerald-50 py-3 px-4 rounded-xl border border-emerald-100 text-center">
+            <span className="flex items-center justify-center gap-1.5">
+              <svg className="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+              </svg>
               구독 자동 결제 없음 (1회 단건 결제)
             </span>
-            <span className="hidden sm:inline text-green-300">|</span>
-            <span className="flex items-center justify-center gap-1">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+            <span className="hidden sm:inline text-emerald-300">|</span>
+            <span className="flex items-center justify-center gap-1.5">
+              <svg className="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+              </svg>
               STAR 기반 3회 생성/재생성 포함
             </span>
           </div>
 
-          <button
-            onClick={requestPayment}
-            disabled={!agreedToRefundPolicy || !resumePrompt.trim() || !isWidgetReady}
-            className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-medium rounded-md shadow-sm transition"
-          >
-            {!isWidgetReady ? "결제 모듈 로딩 중..." : "결제하기"}
-          </button>
-
-          <button
-            onClick={() => handleGenerate()}
-            disabled={isGenerating || !resumePrompt.trim()}
-            className="w-full py-3 px-4 bg-white border border-blue-600 text-blue-600 hover:bg-blue-50 disabled:border-gray-300 disabled:text-gray-400 disabled:bg-gray-50 disabled:cursor-not-allowed font-medium rounded-md shadow-sm transition mt-2"
-          >
-            {isGenerating ? "AI 자소서 생성 중..." : "무료로 생성하기 (일 3회 제한)"}
-          </button>
-
+          {/* 에러 메시지 */}
           {error && (
-            <div className="p-3 bg-red-50 text-red-700 rounded-md text-sm border border-red-200">
-              {error}
+            <div className="p-3.5 bg-red-50 text-red-700 rounded-xl text-xs sm:text-sm border border-red-200 flex items-start gap-2">
+              <svg className="w-4 h-4 text-red-500 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span>{error}</span>
             </div>
           )}
+
+          {/* 타임아웃 안내 및 재시도 버튼 */}
+          {paymentState === "timeout" && (
+            <div className="p-4 bg-amber-50 text-amber-800 rounded-xl text-xs sm:text-sm border border-amber-200 flex flex-col gap-3">
+              <div className="flex items-start gap-2">
+                <svg className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                <span>{paymentTimeoutMsg}</span>
+              </div>
+              <button
+                type="button"
+                onClick={handleRetryPayment}
+                className="self-start py-2 px-4 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-lg transition-colors cursor-pointer"
+              >
+                결제 다시 시도 ↻
+              </button>
+            </div>
+          )}
+
+          {/* [결제 버튼]: 회색 "결제 모듈 로딩 중..." 완전 제거, 상시 파란색 활성화 */}
+          <button
+            type="button"
+            onClick={handlePaymentClick}
+            disabled={paymentState === "processing"}
+            className="w-full py-4 px-6 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 disabled:bg-blue-500 text-white font-bold text-base sm:text-lg rounded-xl shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2.5 cursor-pointer disabled:cursor-wait"
+          >
+            {paymentState === "processing" ? (
+              <>
+                <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <span>결제창을 준비하고 있습니다...</span>
+              </>
+            ) : (
+              <>
+                <span>{PRICE_DISPLAY}원 결제하고 완성하기</span>
+                <span className="text-xs bg-blue-500/80 px-2 py-0.5 rounded font-normal">3회 포함</span>
+              </>
+            )}
+          </button>
+
+          {/* 무료 생성 버튼 */}
+          <button
+            type="button"
+            onClick={() => handleGenerate()}
+            disabled={isGenerating}
+            className="w-full py-3.5 px-4 bg-white border border-blue-600 text-blue-600 hover:bg-blue-50 disabled:border-gray-300 disabled:text-gray-400 disabled:bg-gray-50 disabled:cursor-not-allowed font-semibold text-sm rounded-xl shadow-xs transition-all cursor-pointer"
+          >
+            {isGenerating ? "AI 자소서 생성 중..." : "먼저 무료로 생성하기 (일 3회 제한)"}
+          </button>
         </section>
 
-        <FAQAccordion />
-
+        {/* ========================================================================= */}
+        {/* [생성된 자소서 결과 섹션] */}
+        {/* ========================================================================= */}
         {result && (
-          <section className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-            <h2 className="text-xl font-semibold mb-4">생성된 자기소개서</h2>
-            <div className="whitespace-pre-wrap bg-gray-50 p-4 rounded-md border border-gray-100 text-sm leading-relaxed mb-4">
+          <section id="result-section" className="scroll-mt-20 bg-white p-6 sm:p-8 rounded-2xl shadow-sm border border-gray-200 animate-fadeIn">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg sm:text-xl font-bold text-gray-900 flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                생성된 자기소개서 초안
+              </h2>
+              <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-200">
+                STAR 교정 완료
+              </span>
+            </div>
+            
+            <div className="whitespace-pre-wrap bg-gray-50/80 p-5 rounded-xl border border-gray-200 text-sm leading-relaxed mb-6 font-normal text-gray-800 select-text">
               {result}
             </div>
+
             <button
               onClick={handleInterviewRedirect}
               disabled={isRedirecting}
-              className="w-full py-3 px-4 bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white font-medium rounded-md shadow-sm transition"
+              className="w-full py-4 px-6 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 disabled:bg-emerald-400 text-white font-bold text-base rounded-xl shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
-              {isRedirecting ? "이동 중..." : "이 자소서로 AI 면접 꼬리질문 받아보기 ➔"}
+              {isRedirecting ? (
+                <span>면접 준비 페이지로 이동 중...</span>
+              ) : (
+                <>
+                  <span>이 자소서로 AI 면접 꼬리질문 받아보기</span>
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                  </svg>
+                </>
+              )}
             </button>
           </section>
         )}
+
+        {/* ========================================================================= */}
+        {/* [FAQ 섹션] */}
+        {/* ========================================================================= */}
+        <FAQAccordion />
+
       </div>
     </main>
   );
