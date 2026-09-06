@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { Redis } from "@upstash/redis";
 import { Ratelimit } from "@upstash/ratelimit";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { generateContentWithFallback } from "@/lib/gemini";
 
 export async function POST(req: Request) {
   // Initialize Redis inside function to ensure env vars are loaded at runtime
@@ -10,10 +11,10 @@ export async function POST(req: Request) {
     token: process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN || "dummy-token",
   });
 
-  // Initialize Rate Limiter: max 3 requests per 24 hours per IP (slidingWindow)
+  // Initialize Rate Limiter: max 2 requests per 24 hours per IP (slidingWindow)
   const ratelimit = new Ratelimit({
     redis: redis,
-    limiter: Ratelimit.slidingWindow(3, "24 h"),
+    limiter: Ratelimit.slidingWindow(2, "24 h"),
   });
 
   // Initialize Gemini
@@ -60,7 +61,7 @@ export async function POST(req: Request) {
       const { success } = await ratelimit.limit(`ratelimit_free_${ip}`);
       if (!success) {
         return NextResponse.json(
-          { error: "Too Many Requests. Free tier limit exceeded (3 per 24h)." },
+          { error: "Too Many Requests. Free tier limit exceeded (2 per 24h)." },
           { status: 429 }
         );
       }
@@ -94,9 +95,9 @@ export async function POST(req: Request) {
 
     const fullPrompt = `${systemInstruction}\n\n지원 직무: ${jobTitle.trim()}\n\n사용자 경험 요약:\n${memo.trim()}`;
 
-    const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite" });
-    const result = await model.generateContent(fullPrompt);
-    const responseText = result.response.text();
+    // Gemini 3.8 Flash 호출 (실패 시 3.7 Flash 등 투명한 자동 폴백)
+    const genResult = await generateContentWithFallback(genAI, fullPrompt, "gemini-3.8-flash");
+    const responseText = genResult.text;
 
     // ── Deduct generation count (paid requests only) ──
     if (!isFree && orderId) {
@@ -109,7 +110,12 @@ export async function POST(req: Request) {
       }
     }
 
-    return NextResponse.json({ text: responseText });
+    return NextResponse.json({
+      success: true,
+      text: responseText,
+      usedModel: genResult.usedModel,
+      usage: genResult.usage,
+    });
 
   } catch (error: any) {
     console.error("Error generating resume:", error);

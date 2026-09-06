@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { loadPaymentWidget, PaymentWidgetInstance } from "@tosspayments/payment-widget-sdk";
 import PreviewCard from "@/components/PreviewCard";
+import PaymentSection from "@/components/PaymentSection";
 import FAQAccordion from "@/components/FAQAccordion";
 
 const clientKey = process.env.NEXT_PUBLIC_TOSS_CLIENT_KEY || "test_gck_EXAMPLETEST";
@@ -234,7 +235,7 @@ export default function Home() {
 
       if (!res.ok) {
         if (res.status === 429) {
-          throw new Error("무료 생성 횟수(일 3회)가 초과되었습니다.");
+          throw new Error("무료 생성 횟수(일 2회)가 초과되었습니다.");
         }
         if (res.status === 403) {
           throw new Error("결제 정보가 유효하지 않거나 사용 횟수를 모두 소진했습니다.");
@@ -433,120 +434,26 @@ export default function Home() {
         </section>
 
         {/* ========================================================================= */}
-        {/* [결제 및 생성 섹션] */}
+        {/* [결제 및 생성 섹션 (공통 컴포넌트)] */}
         {/* ========================================================================= */}
-        <section className="bg-white p-6 sm:p-8 rounded-2xl shadow-sm border border-gray-200 flex flex-col gap-5">
-          <div className="flex items-center justify-between border-b border-gray-100 pb-4">
-            <div>
-              <h2 className="text-lg sm:text-xl font-bold text-gray-900">
-                결제 및 생성 ({PRICE_DISPLAY}원)
-              </h2>
-              <p className="text-xs text-gray-500 mt-0.5">
-                토스페이먼츠 보안 모듈을 통해 안전하게 결제됩니다.
-              </p>
-            </div>
-            <span className="text-xs font-bold text-blue-700 bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-100">
-              단건 결제
-            </span>
-          </div>
-          
-          {/* Toss Payments 위젯 컨테이너 */}
-          <div id="payment-widget" className="w-full"></div>
-          <div id="agreement" className="w-full"></div>
-
-          {/* 환불 정책 동의 체크박스 */}
-          <label htmlFor="refund-agree" className="flex items-start gap-3 cursor-pointer p-4 bg-gray-50 border border-gray-200 rounded-xl hover:bg-gray-100/70 transition-colors">
-            <input
-              id="refund-agree"
-              type="checkbox"
-              className="mt-0.5 w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500 flex-shrink-0 cursor-pointer"
-              checked={agreedToRefundPolicy}
-              onChange={(e) => setAgreedToRefundPolicy(e.target.checked)}
-            />
-            <span className="text-xs sm:text-sm text-gray-700 leading-relaxed break-keep">
-              <strong>[필수]</strong> 결제 완료 시 즉시 AI 생성이 시작되는 디지털 콘텐츠 특성상, 생성 시작 후 단순 변심에 의한 환불이 불가함에 동의합니다. (시스템 오류 시 100% 전액 환불)
-            </span>
-          </label>
-
-          {/* 안전 결제 보장 바 */}
-          <div className="flex flex-col sm:flex-row justify-center gap-3 sm:gap-6 text-xs sm:text-sm font-semibold text-emerald-700 bg-emerald-50 py-3 px-4 rounded-xl border border-emerald-100 text-center">
-            <span className="flex items-center justify-center gap-1.5">
-              <svg className="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-              </svg>
-              구독 자동 결제 없음 (1회 단건 결제)
-            </span>
-            <span className="hidden sm:inline text-emerald-300">|</span>
-            <span className="flex items-center justify-center gap-1.5">
-              <svg className="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-              </svg>
-              STAR 기반 3회 생성/재생성 포함
-            </span>
-          </div>
-
-          {/* 에러 메시지 */}
-          {error && (
-            <div className="p-3.5 bg-red-50 text-red-700 rounded-xl text-xs sm:text-sm border border-red-200 flex items-start gap-2">
-              <svg className="w-4 h-4 text-red-500 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <span>{error}</span>
-            </div>
-          )}
-
-          {/* 타임아웃 안내 및 재시도 버튼 */}
-          {paymentState === "timeout" && (
-            <div className="p-4 bg-amber-50 text-amber-800 rounded-xl text-xs sm:text-sm border border-amber-200 flex flex-col gap-3">
-              <div className="flex items-start gap-2">
-                <svg className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                </svg>
-                <span>{paymentTimeoutMsg}</span>
-              </div>
-              <button
-                type="button"
-                onClick={handleRetryPayment}
-                className="self-start py-2 px-4 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-lg transition-colors cursor-pointer"
-              >
-                결제 다시 시도 ↻
-              </button>
-            </div>
-          )}
-
-          {/* [결제 버튼]: 회색 "결제 모듈 로딩 중..." 완전 제거, 상시 파란색 활성화 */}
-          <button
-            type="button"
-            onClick={handlePaymentClick}
-            disabled={paymentState === "processing"}
-            className="w-full py-4 px-6 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 disabled:bg-blue-500 text-white font-bold text-base sm:text-lg rounded-xl shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2.5 cursor-pointer disabled:cursor-wait"
-          >
-            {paymentState === "processing" ? (
-              <>
-                <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                <span>결제창을 준비하고 있습니다...</span>
-              </>
-            ) : (
-              <>
-                <span>{PRICE_DISPLAY}원 결제하고 완성하기</span>
-                <span className="text-xs bg-blue-500/80 px-2 py-0.5 rounded font-normal">3회 포함</span>
-              </>
-            )}
-          </button>
-
-          {/* 무료 생성 버튼 */}
-          <button
-            type="button"
-            onClick={() => handleGenerate()}
-            disabled={isGenerating}
-            className="w-full py-3.5 px-4 bg-white border border-blue-600 text-blue-600 hover:bg-blue-50 disabled:border-gray-300 disabled:text-gray-400 disabled:bg-gray-50 disabled:cursor-not-allowed font-semibold text-sm rounded-xl shadow-xs transition-all cursor-pointer"
-          >
-            {isGenerating ? "AI 자소서 생성 중..." : "먼저 무료로 생성하기 (일 3회 제한)"}
-          </button>
-        </section>
+        <PaymentSection
+          priceDisplay={PRICE_DISPLAY}
+          agreedToRefundPolicy={agreedToRefundPolicy}
+          onAgreedChange={setAgreedToRefundPolicy}
+          refundCheckboxId="refund-agree"
+          guaranteeBenefitText="STAR 기반 3회 생성/재생성 포함"
+          error={error}
+          paymentState={paymentState}
+          paymentTimeoutMsg={paymentTimeoutMsg}
+          onRetryPayment={handleRetryPayment}
+          onPaymentClick={handlePaymentClick}
+          paidButtonText={`${PRICE_DISPLAY}원 결제하고 완성하기`}
+          paidButtonSubText="3회 포함"
+          isGenerating={isGenerating}
+          onFreeGenerate={() => handleGenerate()}
+          freeButtonText="먼저 무료로 생성하기 (일 2회 제한)"
+          generatingText="AI 자소서 생성 중..."
+        />
 
         {/* ========================================================================= */}
         {/* [생성된 자소서 결과 섹션] */}

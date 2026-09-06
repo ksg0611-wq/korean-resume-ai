@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
+import { generateContentWithFallback } from "@/lib/gemini";
 
 // ── Environment Variables Check ──
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
@@ -127,11 +128,16 @@ export async function POST(req: Request) {
 
     const fullPrompt = `${systemInstruction}\n\n지원자 자기소개서:\n${resumeText.trim()}`;
 
-    const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite" });
-    const result = await model.generateContent(fullPrompt);
-    const responseText = result.response.text();
+    // Gemini 3.8 Flash 호출 (실패 시 3.7 Flash 등 투명한 자동 폴백)
+    const genResult = await generateContentWithFallback(genAI, fullPrompt, "gemini-3.8-flash");
+    const responseText = genResult.text;
 
-    return NextResponse.json({ text: responseText });
+    return NextResponse.json({
+      success: true,
+      text: responseText,
+      usedModel: genResult.usedModel,
+      usage: genResult.usage,
+    });
   } catch (error: any) {
     console.error("Generate API Error:", error);
     return NextResponse.json(
