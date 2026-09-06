@@ -15,6 +15,7 @@ const PRICE_DISPLAY = PRICE.toLocaleString("ko-KR"); // "4,900"
 
 export default function Home() {
   const [resumePrompt, setResumePrompt] = useState("");
+  const [selectedJobTitle, setSelectedJobTitle] = useState("");
   const [agreedToRefundPolicy, setAgreedToRefundPolicy] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [result, setResult] = useState("");
@@ -67,13 +68,11 @@ export default function Home() {
       setResumePrompt(savedDraft);
     }
 
-    // 채용공고 등에서 공고명(jobTitle) 파라미터가 전달된 경우
+    // 채용공고 등에서 공고명(jobTitle) 파라미터가 전달된 경우 타겟팅 배지 활성화 (textarea 본문은 오염시키지 않음)
     const urlParams = new URLSearchParams(window.location.search);
     const jobTitleParam = urlParams.get("jobTitle") || urlParams.get("job");
     if (jobTitleParam) {
-      const template = `[지원 기업/공고: ${jobTitleParam}]\n\n1. 지원 동기 및 입사 후 포부:\n- \n\n2. 주요 직무 역량 및 프로젝트/경험:\n- \n`;
-      setResumePrompt(template);
-      localStorage.setItem("resumeDraft", template);
+      setSelectedJobTitle(jobTitleParam.trim());
       setTimeout(() => {
         const el = document.getElementById("resume-form");
         if (el) el.scrollIntoView({ behavior: "smooth" });
@@ -216,7 +215,7 @@ export default function Home() {
 
     try {
       const payload: any = { 
-        jobTitle: "일반 직무",
+        jobTitle: selectedJobTitle.trim() ? selectedJobTitle.trim() : "일반 직무",
         memo: textToUse,
         isFree: !paidOrderId,
       };
@@ -399,6 +398,30 @@ export default function Home() {
           <p className="text-xs text-gray-500 mb-3 break-keep">
             완벽한 문장이 아니어도 괜찮습니다. 생각나는 단어나 활동 메모만 편하게 적어주시면 AI가 STAR(상황·과제·행동·결과) 기법으로 완성합니다.
           </p>
+
+          {/* 선택된 공고 타겟팅 배지 (URL 파라미터 유입 시 노출, textarea 오염 방지) */}
+          {selectedJobTitle && (
+            <div className="mb-3.5 flex items-center justify-between gap-2 p-2.5 sm:px-3.5 sm:py-2 bg-sky-50 border border-sky-200 rounded-xl text-xs text-sky-900">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="shrink-0 font-bold bg-sky-200/80 text-sky-800 px-2 py-0.5 rounded-md text-[11px]">
+                  타겟 공고
+                </span>
+                <span className="font-semibold truncate">
+                  선택된 공고: {selectedJobTitle}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedJobTitle("")}
+                className="shrink-0 text-sky-600 hover:text-sky-900 hover:bg-sky-100 px-2 py-0.5 rounded-lg transition-colors font-bold text-xs flex items-center gap-1 cursor-pointer"
+                title="공고 선택 해제"
+                aria-label="공고 선택 해제"
+              >
+                ✕ 해제
+              </button>
+            </div>
+          )}
+
           <textarea
             id="resume-textarea"
             className="w-full h-44 p-4 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition resize-none text-sm leading-relaxed"

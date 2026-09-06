@@ -105,6 +105,16 @@ export async function getDBClient() {
 }
 
 export async function dbQuery<T = any>(text: string, params: any[] = []): Promise<T[]> {
+  // Operational DB Safety Rule:
+  // Blanket DELETE or TRUNCATE without WHERE clause is strictly prohibited on production tables.
+  const normalized = text.trim().replace(/\s+/g, ' ').toUpperCase();
+  if (
+    (normalized.startsWith('DELETE FROM') && !normalized.includes(' WHERE ')) ||
+    normalized.startsWith('TRUNCATE ')
+  ) {
+    throw new Error('[DB Client Safety] Blanket DELETE or TRUNCATE without WHERE clause is strictly prohibited to protect production data.');
+  }
+
   const db = await getDBClient();
   const res = await db.query(text, params);
   return (res.rows || []) as T[];
