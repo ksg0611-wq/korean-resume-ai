@@ -54,6 +54,53 @@ export default function PaymentSection({
   const displayTitle = title || `결제 및 생성 (${priceDisplay}원)`;
   const displayPaidText = paidButtonText || `${priceDisplay}원 결제하고 완성하기`;
 
+  // ── 생성 대기 단계별 진행 상태 관리 (무한 대기 방지 및 체감 속도 개선) ──
+  const [generationStep, setGenerationStep] = React.useState(0);
+  const [progressPercent, setProgressPercent] = React.useState(15);
+
+  React.useEffect(() => {
+    if (!isGenerating) {
+      setGenerationStep(0);
+      setProgressPercent(15);
+      return;
+    }
+
+    const startTime = Date.now();
+    const interval = setInterval(() => {
+      const elapsedSec = (Date.now() - startTime) / 1000;
+      if (elapsedSec < 3.5) {
+        setGenerationStep(1);
+        setProgressPercent(Math.min(40, Math.floor(15 + elapsedSec * 7)));
+      } else if (elapsedSec < 8.5) {
+        setGenerationStep(2);
+        setProgressPercent(Math.min(75, Math.floor(40 + (elapsedSec - 3.5) * 7)));
+      } else if (elapsedSec < 13.5) {
+        setGenerationStep(3);
+        setProgressPercent(Math.min(92, Math.floor(75 + (elapsedSec - 8.5) * 3.4)));
+      } else {
+        setGenerationStep(4);
+        setProgressPercent(96);
+      }
+    }, 200);
+
+    return () => clearInterval(interval);
+  }, [isGenerating]);
+
+  const getStepText = () => {
+    switch (generationStep) {
+      case 1:
+        return "1단계: 입력 경험 및 직무 맥락 분석 중...";
+      case 2:
+        return "2단계: STAR 구조 심층 분석 및 문장 재구성 중... (약 10~15초 소요)";
+      case 3:
+        return "3단계: 비즈니스 임팩트 수치화 및 논리 검증 중...";
+      case 4:
+        return "4단계: 최종 리포트 서식 정리 중 (잠시만 기다려주세요)...";
+      default:
+        return "AI 심층 생성 준비 중...";
+    }
+  };
+
   return (
     <section className="bg-white p-6 sm:p-8 rounded-2xl shadow-sm border border-gray-200 flex flex-col gap-5">
       {/* 결제 헤더 */}
@@ -138,11 +185,40 @@ export default function PaymentSection({
         </div>
       )}
 
+      {/* 생성 대기 진행 상태 안내 (무한 대기 방지 단계별 진행 문구 및 프로그레스 바) */}
+      {isGenerating && (
+        <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl flex flex-col gap-2.5 animate-fadeIn">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <svg className="animate-spin h-4 w-4 text-blue-600 shrink-0" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              <span className="text-xs sm:text-sm font-bold text-blue-900">
+                {getStepText()}
+              </span>
+            </div>
+            <span className="text-[11px] font-semibold text-blue-700 bg-blue-100/80 px-2.5 py-0.5 rounded-full shrink-0">
+              약 10~15초 소요
+            </span>
+          </div>
+          <div className="w-full bg-blue-200/60 rounded-full h-1.5 overflow-hidden">
+            <div
+              className="bg-blue-600 h-1.5 rounded-full transition-all duration-300 ease-out"
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
+          <p className="text-[11px] text-blue-700 leading-relaxed">
+            Gemini 3.8 Flash가 실무진 면접관·채용담당자 관점에서 논리 구조와 비즈니스 수치를 정밀 교정하고 있습니다.
+          </p>
+        </div>
+      )}
+
       {/* [상시 파란색 활성 결제 버튼] (회색 비활성 제거, 10초 타임아웃 상태 머신) */}
       <button
         type="button"
         onClick={onPaymentClick}
-        disabled={paymentState === "processing"}
+        disabled={paymentState === "processing" || isGenerating}
         className="w-full py-4 px-6 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 disabled:bg-blue-500 text-white font-bold text-base sm:text-lg rounded-xl shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2.5 cursor-pointer disabled:cursor-wait"
       >
         {paymentState === "processing" ? (
@@ -172,7 +248,17 @@ export default function PaymentSection({
         disabled={isGenerating}
         className="w-full py-3.5 px-4 bg-white border border-blue-600 text-blue-600 hover:bg-blue-50 disabled:border-gray-300 disabled:text-gray-400 disabled:bg-gray-50 disabled:cursor-not-allowed font-semibold text-sm rounded-xl shadow-xs transition-all cursor-pointer"
       >
-        {isGenerating ? generatingText : freeButtonText}
+        {isGenerating ? (
+          <span className="flex items-center justify-center gap-2 text-blue-600">
+            <svg className="animate-spin h-4 w-4 text-blue-600" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <span>{getStepText()}</span>
+          </span>
+        ) : (
+          freeButtonText
+        )}
       </button>
     </section>
   );

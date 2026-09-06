@@ -4,6 +4,9 @@ import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
 import { generateContentWithFallback } from "@/lib/gemini";
 
+// Vercel Serverless Function Execution Timeout (방어적 60초 설정)
+export const maxDuration = 60;
+
 // ── Environment Variables Check ──
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
 const KV_REST_API_URL = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL || "";

@@ -4,6 +4,9 @@ import { Ratelimit } from "@upstash/ratelimit";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { generateContentWithFallback } from "@/lib/gemini";
 
+// Vercel Serverless Function Execution Timeout (방어적 60초 설정)
+export const maxDuration = 60;
+
 export async function POST(req: Request) {
   // Initialize Redis inside function to ensure env vars are loaded at runtime
   const redis = new Redis({
