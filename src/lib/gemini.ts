@@ -1,4 +1,4 @@
-﻿import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 export interface GenerateResult {
   text: string;
@@ -24,8 +24,7 @@ export function isModelNotAvailableError(err: any): boolean {
     msg.includes("is not supported") ||
     msg.includes("unsupported") ||
     msg.includes("permission denied") ||
-    msg.includes("access denied") ||
-    msg.includes("models/")
+    msg.includes("access denied")
   );
 }
 
@@ -33,7 +32,7 @@ export function isModelNotAvailableError(err: any): boolean {
  * 최신 Flash 모델 호출 및 투명한 폴백 실행
  * 1) [MODEL_FALLBACK] 콘솔 경고 명시적 출력
  * 2) 실제 호출 성공한 modelId 반환
- * 3) 오직 모델 미승인/미존재(404, 403) 오류 시에만 하위 모델로 전환
+ * 3) 오직 모델 미승인/미존재(404, 403) 오류 시에만 하위 모델로 전환 (gemini-3.8-flash -> gemini-3.7-flash 2개 모델 한정)
  */
 export async function generateContentWithFallback(
   genAI: GoogleGenerativeAI,
@@ -43,8 +42,6 @@ export async function generateContentWithFallback(
   const candidateModels = [
     preferredModel,
     "gemini-3.7-flash",
-    "gemini-2.5-flash",
-    "gemini-1.5-flash",
   ];
 
   // 중복 제거

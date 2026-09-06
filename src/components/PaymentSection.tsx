@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React from "react";
 
@@ -109,8 +109,8 @@ export default function PaymentSection({
         </span>
       </div>
 
-      {/* 에러 메시지 */}
-      {error && (
+      {/* 에러 메시지 (타임아웃 시에는 중복 노출 방지를 위해 주황색 타임아웃 박스만 단독 표출) */}
+      {error && paymentState !== "timeout" && (
         <div className="p-3.5 bg-red-50 text-red-700 rounded-xl text-xs sm:text-sm border border-red-200 flex items-start gap-2">
           <svg className="w-4 h-4 text-red-500 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
