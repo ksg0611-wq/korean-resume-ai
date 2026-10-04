@@ -33,17 +33,18 @@ export class IngestDBClient {
 
   async init() {
     const isProd = process.env.NODE_ENV === 'production' || Boolean(process.env.VERCEL) || Boolean(process.env.CRON);
-    const remoteUrls = [
-      process.env.DIRECT_URL,
+    // Deduplicate URLs and prioritize working remote connection
+    const rawUrls = [
       process.env.DATABASE_URL,
+      process.env.DIRECT_URL,
       process.env.SUPABASE_DB_URL
     ].filter(Boolean);
+    const remoteUrls = Array.from(new Set(rawUrls));
 
     let connected = false;
     let lastError = null;
 
     for (const url of remoteUrls) {
-      // Mask password for logging
       const maskedUrl = url.replace(/:([^:@]+)@/, ':****@');
       console.log(`[DB] Attempting remote Supabase connection: ${maskedUrl}`);
       try {
@@ -205,7 +206,6 @@ function parsePosting(it) {
   const startDate = formatDate(it.pbancBgngYmd);
   const endDate = formatDate(it.pbancEndYmd);
 
-  // Parse attachments and steps if present in raw payload
   const attachments = Array.isArray(it.files) ? it.files.map((f, i) => ({
     sortNo: f.sortNo || i + 1,
     type: f.type || 'A',
@@ -311,7 +311,6 @@ export async function fetchLiveOngoingJobs() {
     allItems.push(...items);
     console.log(`[Live API] Page ${page}: fetched ${items.length} items (accumulated: ${allItems.length}${totalCount ? ` / total: ${totalCount}` : ''})`);
 
-    // Termination conditions: fewer items than requested, or reached totalCount, or safety ceiling
     if (items.length < 100 || (totalCount && allItems.length >= totalCount) || page >= 20) {
       hasMore = false;
     } else {
@@ -328,7 +327,6 @@ export async function fetchLiveOngoingJobs() {
 // 4. Ingest Runner Function (Supports LIVE API & SNAPSHOT Modes)
 // ==============================================================================
 export async function runIngest(options = {}) {
-  // Determine mode: CLI flag (--live vs --snapshot) > options.mode > ENV
   const isLiveFlag = process.argv.includes('--live') || options.mode === 'live' || process.env.INGEST_MODE === 'live' || process.env.CRON === 'true';
   const mode = isLiveFlag ? 'LIVE' : 'SNAPSHOT';
   const snapshotPath = options.snapshotPath || 'data/raw_snapshot_20260906.json';
@@ -341,6 +339,7 @@ export async function runIngest(options = {}) {
     console.log(`★ ACTIVE MODE: [LIVE API]`);
     console.log(`  Target: apis.data.go.kr (정부 공공데이터포털 채용정보 실시간 호출)`);
     console.log(`  Endpoint: /1051000/recruitment/list?ongoingYn=Y`);
+    console.log(`  Proof: No local snapshot files (data/*.json) will be read.`);
   } else {
     console.log(`★ ACTIVE MODE: [SNAPSHOT REPLAY]`);
     console.log(`  Target: Local frozen snapshot file (${snapshotPath})`);
@@ -356,14 +355,13 @@ export async function runIngest(options = {}) {
     items = liveRes.items;
     listCalls = liveRes.listCalls;
   } else {
-    // Verify input snapshot
     if (!fs.existsSync(snapshotPath)) {
       throw new Error(`Snapshot file not found at ${snapshotPath}`);
     }
     const snapshotRaw = fs.readFileSync(snapshotPath);
     const snapshotHash = crypto.createHash('sha256').update(snapshotRaw).digest('hex');
     items = JSON.parse(snapshotRaw.toString('utf-8'));
-    listCalls = 6; // Historical equivalent calls for the 510-item snapshot
+    listCalls = 6;
     console.log(`[Snapshot] File: ${snapshotPath}`);
     console.log(`[Snapshot] Size: ${snapshotRaw.length} bytes`);
     console.log(`[Snapshot] SHA-256: ${snapshotHash}`);
@@ -384,7 +382,6 @@ export async function runIngest(options = {}) {
   console.log(`\n[Ingest] Upserting institutions...`);
   const instMap = new Map();
   items.forEach(it => {
-
     const cd = it.pblntInstCd || 'UNKNOWN';
     if (!instMap.has(cd)) {
       instMap.set(cd, {
@@ -407,8 +404,12 @@ export async function runIngest(options = {}) {
   }
   console.log(`[Institutions] Upserted ${instMap.size} institutions.`);
 
+  // In-memory set of existing SNs to avoid N network roundtrips
+  const existingSnsRes = await db.query(`SELECT sn FROM job_postings;`);
+  const existingSnSet = new Set(existingSnsRes.rows.map(r => r.sn));
+
   // Upsert job postings
-  console.log(`[Ingest] Upserting job postings...`);
+  console.log(`\n[Ingest] Upserting job postings...`);
   const startTime = new Date();
   let newInserted = 0;
   let updatedCount = 0;
@@ -418,8 +419,7 @@ export async function runIngest(options = {}) {
     const p = parsePosting(raw);
     if (p.needs_review) needsReviewCount++;
 
-    const existing = await db.query(`SELECT sn FROM job_postings WHERE sn = $1`, [p.sn]);
-    const isNew = existing.rows.length === 0;
+    const isNew = !existingSnSet.has(p.sn);
 
     await db.query(`
       INSERT INTO job_postings (
@@ -488,24 +488,59 @@ export async function runIngest(options = {}) {
     else updatedCount++;
   }
 
+  // ==============================================================================
+  // 5. Absent Items Processing (v2 Spec 3-2: Missed Count, Delisted & Closed)
+  // ==============================================================================
+  console.log(`\n[Absent Items] Processing postings not in current feed...`);
+  const feedSns = items.map(it => parseInt(it.recrutPblntSn, 10));
+
+  // 1) Postings absent from feed whose end_date has passed -> 'closed' (DoD 5: must not be delisted)
+  const closedRes = await db.query(`
+    UPDATE job_postings
+    SET status = 'closed', updated_at = now()
+    WHERE NOT (sn = ANY($1::int[]))
+      AND end_date < CURRENT_DATE
+      AND status != 'closed'
+    RETURNING sn;
+  `, [feedSns]);
+  const closedCount = closedRes.rows.length;
+  console.log(`[Absent Items] Marked ${closedCount} expired absent postings as 'closed'.`);
+
+  // 2) Postings absent from feed whose end_date is today or in future -> increment missed_count (2 consecutive -> delisted)
+  const missedRes = await db.query(`
+    UPDATE job_postings
+    SET missed_count = missed_count + 1,
+        status = CASE WHEN missed_count + 1 >= 2 THEN 'delisted'::job_posting_status ELSE status END,
+        updated_at = now()
+    WHERE NOT (sn = ANY($1::int[]))
+      AND end_date >= CURRENT_DATE
+      AND status != 'delisted'
+    RETURNING sn, status, missed_count;
+  `, [feedSns]);
+
+  const delistedCount = missedRes.rows.filter(r => r.status === 'delisted').length;
+  const missed1Count = missedRes.rows.filter(r => r.status !== 'delisted').length;
+  console.log(`[Absent Items] Future-deadline absent postings: ${missed1Count} incremented missed_count=1, ${delistedCount} marked as 'delisted' (missed_count >= 2).`);
+
   const endTime = new Date();
   const runType = mode === 'LIVE' ? 'live-cron' : 'snapshot-replay';
 
   // Log to ingest_runs
-  await db.query(`
+  const ingestRunRes = await db.query(`
     INSERT INTO ingest_runs (
       run_type, target_region, status, total_fetched, new_inserted, updated_count,
       delisted_count, list_calls, detail_calls, quota_exhausted, needs_review_count,
       started_at, completed_at
     )
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13);
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+    RETURNING id, run_type, status, total_fetched, new_inserted, updated_count, delisted_count, list_calls, started_at, completed_at;
   `, [
-    runType, 'ALL', 'completed', items.length, newInserted, updatedCount,
-    0, listCalls, 0, false, needsReviewCount,
+    runType, 'ALL', 'completed', items.length, newInserted, updatedCount + closedCount,
+    delistedCount, listCalls, 0, false, needsReviewCount,
     startTime, endTime
   ]);
 
-  console.log(`\n[Ingestion Summary] Mode: [${mode}] | Total: ${items.length}건 | New: ${newInserted}건 | Updated: ${updatedCount}건 | DB Mode: ${dbMode}`);
+  console.log(`\n[Ingestion Summary] Mode: [${mode}] | Fetched: ${items.length}건 | New: ${newInserted}건 | Updated: ${updatedCount}건 | Closed: ${closedCount}건 | Delisted: ${delistedCount}건 | DB Mode: ${dbMode}`);
 
   // Query verification: getTargetJobs dynamic query
   console.log(`\n===============================================================`);
@@ -533,6 +568,10 @@ export async function runIngest(options = {}) {
     total: items.length,
     newInserted,
     updatedCount,
+    closedCount,
+    delistedCount,
+    listCalls,
+    ingestRun: ingestRunRes.rows[0],
     targetJobsCount: targetRes.rows.length,
     targetJobsSns: targetRes.rows.map(r => r.sn)
   };
@@ -548,4 +587,3 @@ if (process.argv[1]?.endsWith('run-ingest.mjs')) {
     process.exit(1);
   });
 }
-

@@ -298,7 +298,7 @@ export default function Home() {
             {/* 상단 알약 배지 */}
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-bold border border-emerald-200 self-start mb-4">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span>공공기관 채용공고 30건 연동</span>
+              <span>공공기관 채용공고 실시간 연동</span>
             </div>
 
             {/* 헤드라인 */}

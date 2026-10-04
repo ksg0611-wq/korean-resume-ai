@@ -17,7 +17,14 @@ export async function getTargetJobs(): Promise<JobPosting[]> {
       AND 'R600002' = ANY(ncs_codes)
       AND 'R1010' = ANY(hire_type_codes)
       AND recruit_type_code IN ('R2010', 'R2030')
-    ORDER BY end_date ASC, sn DESC;
+    ORDER BY
+      CASE
+        WHEN (end_date::date - CURRENT_DATE) BETWEEN 5 AND 14 THEN 1
+        WHEN (end_date::date - CURRENT_DATE) > 14 THEN 2
+        ELSE 3
+      END ASC,
+      end_date ASC,
+      sn DESC;
   `;
   return await dbQuery<JobPosting>(sql);
 }
