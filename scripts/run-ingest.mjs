@@ -261,28 +261,54 @@ function parsePosting(it) {
 // 3. Live API Fetching (apis.data.go.kr Government Gateway)
 // ==============================================================================
 function getGovernmentApiKey() {
-  const key = process.env.DATA_GO_KR_API_KEY;
-  if (key) return key.trim().replace(/^['"]|['"]$/g, '');
-  throw new Error('[API Key Error] DATA_GO_KR_API_KEY not found in process.env or .env.local');
+  const rawKey = process.env.DATA_GO_KR_API_KEY;
+  if (!rawKey) {
+    throw new Error('[API Key Error] DATA_GO_KR_API_KEY not found in process.env or .env.local');
+  }
+  // Strip surrounding quotes and ANY whitespace/newlines (GitHub Secrets pasted with a trailing newline is a common cause of 403)
+  let key = rawKey.trim().replace(/^['"]|['"]$/g, '').replace(/\s+/g, '');
+  // Accept both portal key variants: if the "Encoding" key (already percent-encoded) was stored,
+  // decode it once so the later encodeURIComponent() does not double-encode it (-> 403 SERVICE_KEY_IS_NOT_REGISTERED_ERROR).
+  const wasPercentEncoded = /%[0-9A-Fa-f]{2}/.test(key);
+  if (wasPercentEncoded) {
+    try { key = decodeURIComponent(key); } catch { /* keep as-is */ }
+  }
+  // Non-secret diagnostics only (never print the key itself)
+  console.log(`[API Key] length=${key.length}, percentEncodedInput=${wasPercentEncoded}, hadWhitespaceOrQuotes=${rawKey.trim().length !== rawKey.trim().replace(/^['"]|['"]$/g, '').replace(/\s+/g, '').length}`);
+  return key;
 }
 
 async function fetchWithRetry(url, maxRetries = 3) {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    let nonRetryable = false;
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 15000);
       const res = await fetch(url, { signal: controller.signal });
       clearTimeout(timeoutId);
       if (!res.ok) {
-        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        // Read the gateway's error body (contains no secrets) so 403 causes can be told apart in CI logs:
+        //  - JSON "SERVICE_KEY_IS_NOT_REGISTERED_ERROR" => key problem (request reached the API app layer)
+        //  - HTML / non-JSON / empty body             => network-level (WAF / geo) block
+        let detail = '';
+        try {
+          const bodyText = (await res.text()).replace(/\s+/g, ' ').trim();
+          const errMsg = bodyText.match(/"errMsg"\s*:\s*"([^"]+)"/)?.[1];
+          const reason = bodyText.match(/"returnReasonCode"\s*:\s*"([^"]+)"/)?.[1];
+          detail = errMsg
+            ? ` | gateway errMsg=${errMsg}${reason ? ` reasonCode=${reason}` : ''}`
+            : ` | non-gateway body[${res.headers.get('content-type') || 'n/a'}]: ${bodyText.slice(0, 200)}`;
+        } catch { /* ignore body read errors */ }
+        if (res.status === 401 || res.status === 403) nonRetryable = true; // deterministic auth/permission error
+        throw new Error(`HTTP ${res.status}: ${res.statusText}${detail}`);
       }
       return await res.json();
     } catch (err) {
-      const isLast = attempt === maxRetries;
+      const isLast = attempt === maxRetries || nonRetryable;
       const causeStr = err.cause ? ` [Cause: ${err.cause.code || err.cause}]` : '';
       console.warn(`[Live API] Page fetch attempt ${attempt}/${maxRetries} failed: ${err.message}${causeStr}`);
       if (isLast) {
-        throw new Error(`[Live API Gateway Error] Failed after ${maxRetries} attempts to reach apis.data.go.kr. External government gateway server appears to be experiencing downtime or network timeout.`);
+        throw new Error(`[Live API Gateway Error] Failed after ${attempt} attempt(s) to reach apis.data.go.kr. Last error: ${err.message}${causeStr}`);
       }
       console.log(`[Live API] Retrying in ${2 * attempt}s...`);
       await new Promise(r => setTimeout(r, 2000 * attempt));

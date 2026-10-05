@@ -1,0 +1,25 @@
+name: Diagnose data.go.kr Access
+
+# Manual-only diagnostic: runs from a GitHub-hosted runner to tell apart
+# (a) a bad/mis-encoded DATA_GO_KR_API_KEY secret and (b) IP/geo blocking of the runner.
+# Safe to delete after the root cause is confirmed. The key value is never printed.
+on:
+  workflow_dispatch:
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Diagnose apis.data.go.kr access (no npm install needed)
+        env:
+          DATA_GO_KR_API_KEY: ${{ secrets.DATA_GO_KR_API_KEY }}
+        run: node scripts/diagnose-data-go-kr-access.mjs
