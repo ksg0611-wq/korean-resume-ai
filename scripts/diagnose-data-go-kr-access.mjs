@@ -58,26 +58,59 @@ const garbage = await probe('garbage key', 'INVALIDKEY_DIAG_123');
 const nokey = await probe('no key     ', '');
 
 const rawEnv = process.env.DATA_GO_KR_API_KEY;
-let real = null;
+let probeResults = [];
 if (!rawEnv) {
   console.log('  [real key] DATA_GO_KR_API_KEY is EMPTY/UNSET in this environment (secret missing or wrong name)');
 } else {
   const stripped = rawEnv.trim().replace(/^['"]|['"]$/g, '');
   const cleaned = stripped.replace(/\s+/g, '');
   const pct = /%[0-9A-Fa-f]{2}/.test(cleaned);
-  const decoded = pct ? decodeURIComponent(cleaned) : cleaned;
-  console.log(`\n=== Real key forms (length=${decoded.length}, percentEncodedInput=${pct}, hadWhitespace=${stripped.length !== cleaned.length}) ===`);
-  real = await probe('A normalized (decode once, encode once)', encodeURIComponent(decoded));
-  await probe('B old script behaviour (trim, encode once, no decode)', encodeURIComponent(stripped));
+  let decoded = cleaned;
+  try { if (pct) decoded = decodeURIComponent(cleaned); } catch {}
+
+  console.log(`\n=== Real key forms (length=${cleaned.length}, percentEncodedInput=${pct}) ===`);
+  const r1 = await probe('1. Raw as-is (인코딩 키 원본 그대로, 추가 인코딩 없음)', cleaned);
+  const r2 = await probe('2. encodeURIComponent(cleaned) (디코딩 키에 URI 인코딩 적용)', encodeURIComponent(cleaned));
+  const r3 = await probe('3. decode once then encodeURIComponent', encodeURIComponent(decoded));
+  probeResults = [
+    { name: 'Raw as-is (인코딩 키 직결)', ...r1 },
+    { name: 'encodeURIComponent (디코딩 키 인코딩)', ...r2 },
+    { name: 'decode then encode', ...r3 }
+  ];
 }
 
 console.log('\n=== Verdict ===');
+let verdict = '';
 if (!garbage.gateway && !nokey.gateway) {
-  console.log('  GEO/WAF BLOCK: runner IP is rejected before reaching the API app layer (garbage/no-key requests get no gateway JSON).');
+  verdict = 'GEO/WAF BLOCK: 러너 IP가 게이트웨이 전단에서 차단됨';
 } else if (!rawEnv) {
-  console.log('  NOT geo-blocked (gateway answers). Secret DATA_GO_KR_API_KEY is empty/unset.');
-} else if (real?.ok) {
-  console.log('  NOT geo-blocked and key is VALID with normalized form A. Ingest should succeed.');
+  verdict = 'KEY UNSET: DATA_GO_KR_API_KEY 시크릿이 비어있음';
 } else {
-  console.log('  NOT geo-blocked (gateway answers JSON errors). The 403 with the real key is a KEY problem (unregistered/expired/mis-encoded or wrong value in the secret).');
+  const working = probeResults.find(r => r.ok);
+  if (working) {
+    verdict = `SUCCESS: [${working.name}] 방식으로 정상 200 OK 수신 확인! (해외 IP 차단 아님)`;
+  } else {
+    verdict = 'KEY INVALID: 게이트웨이 응답 수신되었으나(해외 IP 차단 아님), 등록된 모든 키 형식에서 미등록 키(403 reasonCode=30) 오류 반환';
+  }
+}
+console.log(`  ${verdict}`);
+
+// GitHub Step Summary 지원
+if (process.env.GITHUB_STEP_SUMMARY) {
+  const summaryLines = [
+    '## 🔍 공공데이터포털 API 연동 진단 결과',
+    '',
+    `**최종 판정**: ${verdict}`,
+    '',
+    '| 테스트 항목 | HTTP 상태 | 판정 |',
+    '| :--- | :---: | :--- |',
+    `| 가비지 키 프로브 | ${garbage.status} | ${garbage.gateway ? '게이트웨이 도달 확인' : '네트워크 차단'} |`,
+    `| 키 누락 프로브 | ${nokey.status} | ${nokey.gateway ? '게이트웨이 도달 확인' : '네트워크 차단'} |`
+  ];
+  probeResults.forEach(r => {
+    summaryLines.push(`| ${r.name} | ${r.status} | ${r.ok ? '✅ 200 성공' : '❌ 실패'} |`);
+  });
+  try {
+    fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, summaryLines.join('\n') + '\n');
+  } catch {}
 }

@@ -260,22 +260,70 @@ function parsePosting(it) {
 // ==============================================================================
 // 3. Live API Fetching (apis.data.go.kr Government Gateway)
 // ==============================================================================
-function getGovernmentApiKey() {
+/**
+ * 공공데이터포털(apis.data.go.kr) 서비스키 파라미터 자동 확정 함수
+ *
+ * 공공데이터포털 키 특성:
+ * 1) 일반 인증키 (Encoding): 이미 %2B, %2F, %3D 등으로 인코딩된 상태 -> URL 쿼리에 추가 인코딩 없이 그대로(?serviceKey=...) 전달해야 함.
+ * 2) 일반 인증키 (Decoding): +, /, == 등 원본 특수문자 상태 -> URL 쿼리 전송 시 반드시 encodeURIComponent()로 인코딩해야 함.
+ *
+ * GitHub Secrets에 어떤 키(Encoding/Decoding)를 등록했든, 개행/따옴표가 섞였든 상관없이
+ * 1건 경량 프로브 호출을 통해 200 OK가 검증된 최적의 쿼리 파라미터 문자열을 자동 확정합니다.
+ */
+async function resolveWorkingServiceKeyQueryParam() {
   const rawKey = process.env.DATA_GO_KR_API_KEY;
   if (!rawKey) {
     throw new Error('[API Key Error] DATA_GO_KR_API_KEY not found in process.env or .env.local');
   }
-  // Strip surrounding quotes and ANY whitespace/newlines (GitHub Secrets pasted with a trailing newline is a common cause of 403)
-  let key = rawKey.trim().replace(/^['"]|['"]$/g, '').replace(/\s+/g, '');
-  // Accept both portal key variants: if the "Encoding" key (already percent-encoded) was stored,
-  // decode it once so the later encodeURIComponent() does not double-encode it (-> 403 SERVICE_KEY_IS_NOT_REGISTERED_ERROR).
-  const wasPercentEncoded = /%[0-9A-Fa-f]{2}/.test(key);
-  if (wasPercentEncoded) {
-    try { key = decodeURIComponent(key); } catch { /* keep as-is */ }
+
+  // 1. 공백, 개행, 따옴표 엄격 제거
+  const cleanKey = rawKey.trim().replace(/^['"]|['"]$/g, '').replace(/\s+/g, '');
+  const hasPercent = /%[0-9A-Fa-f]{2}/.test(cleanKey);
+
+  console.log(`[API Key Check] Raw length: ${rawKey.length}, Cleaned length: ${cleanKey.length}, Has percent encoding (%XX): ${hasPercent}`);
+
+  // 2. 후보군 구성
+  const candidates = [];
+  if (hasPercent) {
+    // 사용자가 'Encoding 키'를 등록한 경우: 원본 그대로 전송이 1순위 (추가 인코딩 금지)
+    candidates.push({ label: 'Encoding Key (Raw as-is, no double encoding)', param: cleanKey });
+    try {
+      candidates.push({ label: 'Decoded then Encoded', param: encodeURIComponent(decodeURIComponent(cleanKey)) });
+    } catch {}
+  } else {
+    // 사용자가 'Decoding 키'를 등록한 경우: encodeURIComponent 적용이 1순위
+    candidates.push({ label: 'Decoding Key (with encodeURIComponent)', param: encodeURIComponent(cleanKey) });
+    candidates.push({ label: 'Decoding Key (Raw as-is)', param: cleanKey });
   }
-  // Non-secret diagnostics only (never print the key itself)
-  console.log(`[API Key] length=${key.length}, percentEncodedInput=${wasPercentEncoded}, hadWhitespaceOrQuotes=${rawKey.trim().length !== rawKey.trim().replace(/^['"]|['"]$/g, '').replace(/\s+/g, '').length}`);
-  return key;
+
+  const probeBase = 'https://apis.data.go.kr/1051000/recruitment/list?resultType=json&ongoingYn=Y&numOfRows=1&pageNo=1';
+  let lastFailureDetail = '';
+
+  for (const c of candidates) {
+    try {
+      const probeUrl = `${probeBase}&serviceKey=${c.param}`;
+      const ctrl = new AbortController();
+      const tid = setTimeout(() => ctrl.abort(), 10000);
+      const res = await fetch(probeUrl, { signal: ctrl.signal });
+      clearTimeout(tid);
+
+      const text = await res.text();
+      if (res.ok && text.includes('"resultCode":200')) {
+        console.log(`[API Key Verified] Successfully authenticated via [${c.label}]!`);
+        return c.param;
+      } else {
+        const errMsg = text.match(/"errMsg"\s*:\s*"([^"]+)"/)?.[1] || '';
+        const reason = text.match(/"returnReasonCode"\s*:\s*"([^"]+)"/)?.[1] || '';
+        lastFailureDetail = `HTTP ${res.status}: errMsg=${errMsg}, reasonCode=${reason}`;
+        console.warn(`[API Key Probe] Candidate [${c.label}] failed (${lastFailureDetail}). Trying next...`);
+      }
+    } catch (err) {
+      lastFailureDetail = `${err.message}`;
+      console.warn(`[API Key Probe] Candidate [${c.label}] network error (${lastFailureDetail}). Trying next...`);
+    }
+  }
+
+  throw new Error(`[API Key Error] All serviceKey format candidates failed against apis.data.go.kr. Last error: ${lastFailureDetail}. Please verify that DATA_GO_KR_API_KEY in GitHub Secrets is an active, approved key.`);
 }
 
 async function fetchWithRetry(url, maxRetries = 3) {
@@ -287,9 +335,6 @@ async function fetchWithRetry(url, maxRetries = 3) {
       const res = await fetch(url, { signal: controller.signal });
       clearTimeout(timeoutId);
       if (!res.ok) {
-        // Read the gateway's error body (contains no secrets) so 403 causes can be told apart in CI logs:
-        //  - JSON "SERVICE_KEY_IS_NOT_REGISTERED_ERROR" => key problem (request reached the API app layer)
-        //  - HTML / non-JSON / empty body             => network-level (WAF / geo) block
         let detail = '';
         try {
           const bodyText = (await res.text()).replace(/\s+/g, ' ').trim();
@@ -299,7 +344,7 @@ async function fetchWithRetry(url, maxRetries = 3) {
             ? ` | gateway errMsg=${errMsg}${reason ? ` reasonCode=${reason}` : ''}`
             : ` | non-gateway body[${res.headers.get('content-type') || 'n/a'}]: ${bodyText.slice(0, 200)}`;
         } catch { /* ignore body read errors */ }
-        if (res.status === 401 || res.status === 403) nonRetryable = true; // deterministic auth/permission error
+        if (res.status === 401 || res.status === 403) nonRetryable = true;
         throw new Error(`HTTP ${res.status}: ${res.statusText}${detail}`);
       }
       return await res.json();
@@ -317,7 +362,7 @@ async function fetchWithRetry(url, maxRetries = 3) {
 }
 
 export async function fetchLiveOngoingJobs() {
-  const apiKey = getGovernmentApiKey();
+  const serviceKeyParam = await resolveWorkingServiceKeyQueryParam();
   const allItems = [];
   let page = 1;
   let listCalls = 0;
@@ -327,7 +372,7 @@ export async function fetchLiveOngoingJobs() {
 
   while (hasMore) {
     listCalls++;
-    const url = `https://apis.data.go.kr/1051000/recruitment/list?resultType=json&ongoingYn=Y&numOfRows=100&pageNo=${page}&serviceKey=${encodeURIComponent(apiKey)}`;
+    const url = `https://apis.data.go.kr/1051000/recruitment/list?resultType=json&ongoingYn=Y&numOfRows=100&pageNo=${page}&serviceKey=${serviceKeyParam}`;
     
     console.log(`[Live API] Fetching page ${page} (call #${listCalls})...`);
     const data = await fetchWithRetry(url, 3);
