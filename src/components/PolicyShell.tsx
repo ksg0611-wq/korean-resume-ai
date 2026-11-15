@@ -13,7 +13,7 @@ export default function PolicyShell({
     <main className="flex-1 bg-gray-50 text-gray-900">
       <article className="max-w-3xl mx-auto px-4 sm:px-6 py-10 sm:py-14">
         <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight mb-2">{title}</h1>
-        <p className="text-xs text-gray-500 mb-8">시행일자: {POLICY_EFFECTIVE_DATE}</p>
+        <p className="text-xs text-gray-500 mb-8">{`시행일자: ${POLICY_EFFECTIVE_DATE}`}</p>
         <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-6 sm:p-8 text-sm leading-relaxed text-gray-700 space-y-6 break-keep">
           {children}
         </div>
