@@ -18,6 +18,7 @@ export interface PaymentSectionProps {
   guaranteeBenefitText?: string;
   error?: string;
   refundNotice?: string;
+  refundPendingNotice?: string;
   activeOrder?: { orderId: string; remainingGenerations: number } | null;
   onUseActiveOrder?: () => void;
   paymentState: "idle" | "processing" | "timeout" | "error";
@@ -51,6 +52,7 @@ export default function PaymentSection({
   guaranteeBenefitText = PAID_BENEFIT_TEXT,
   error,
   refundNotice,
+  refundPendingNotice,
   activeOrder,
   onUseActiveOrder,
   paymentState,
@@ -125,6 +127,34 @@ export default function PaymentSection({
         </div>
       )}
 
+      {/* 환불 처리 중(지연 시 고객센터 안내) 배너 */}
+      {refundPendingNotice && (
+        <div
+          role="alert"
+          className="p-4 bg-amber-50 border border-amber-300 text-amber-950 rounded-xl text-xs sm:text-sm space-y-2"
+        >
+          <p className="font-bold">{refundPendingNotice}</p>
+          <div className="flex flex-wrap items-center gap-3 text-xs">
+            {effectiveKakaoUrl && (
+              <a
+                href={effectiveKakaoUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center px-3 py-1.5 rounded-lg bg-amber-600 text-white font-semibold hover:bg-amber-700 transition-colors"
+              >
+                카카오톡 채널 문의하기 ↗
+              </a>
+            )}
+            <a
+              href={`mailto:${BUSINESS_INFO.email}`}
+              className="text-amber-900 underline font-semibold hover:text-amber-700"
+            >
+              고객센터 이메일 ({BUSINESS_INFO.email})
+            </a>
+          </div>
+        </div>
+      )}
+
       {/* 결과 재열람 링크 및 영수증 안내 이메일 입력란 */}
       <div className="flex flex-col gap-1.5">
         <label htmlFor={emailInputId} className="text-xs sm:text-sm font-bold text-gray-800">
@@ -193,7 +223,7 @@ export default function PaymentSection({
       </div>
 
       {/* 에러 메시지 */}
-      {error && paymentState !== "timeout" && !refundNotice && (
+      {error && paymentState !== "timeout" && !refundNotice && !refundPendingNotice && (
         <div className="p-3.5 bg-red-50 text-red-700 rounded-xl text-xs sm:text-sm border border-red-200 flex items-start gap-2">
           <svg className="w-4 h-4 text-red-500 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />

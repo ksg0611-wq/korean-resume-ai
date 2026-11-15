@@ -39,6 +39,7 @@ function InterviewContent({ kakaoChannelUrl }: { kakaoChannelUrl?: string | null
   const [result, setResult] = useState("");
   const [error, setError] = useState("");
   const [refundNotice, setRefundNotice] = useState("");
+  const [refundPendingNotice, setRefundPendingNotice] = useState("");
   const [activeOrder, setActiveOrder] = useState<{
     orderId: string;
     remainingGenerations: number;
@@ -186,6 +187,7 @@ function InterviewContent({ kakaoChannelUrl }: { kakaoChannelUrl?: string | null
   const handlePaymentClick = async () => {
     setError("");
     setRefundNotice("");
+    setRefundPendingNotice("");
     setPaymentTimeoutMsg("");
 
     if (!resumeText.trim()) {
@@ -256,6 +258,7 @@ function InterviewContent({ kakaoChannelUrl }: { kakaoChannelUrl?: string | null
     setIsGenerating(true);
     setError("");
     setRefundNotice("");
+    setRefundPendingNotice("");
     setResult("");
     setPaidResultInfo(null);
 
@@ -292,6 +295,20 @@ function InterviewContent({ kakaoChannelUrl }: { kakaoChannelUrl?: string | null
         if (errData?.refunded || errData?.code === "AUTO_REFUNDED") {
           const msg = errData?.error || "생성 오류로 결제가 자동 전액 환불되었습니다";
           setRefundNotice(msg);
+          setActiveOrder(null);
+          throw new Error(msg);
+        }
+
+        if (
+          errData?.refundPending ||
+          errData?.code === "REFUND_PENDING" ||
+          errData?.order?.status === "refund_failed" ||
+          res.status === 502
+        ) {
+          const msg =
+            errData?.error ||
+            "환불 처리 중입니다(영업일 기준 1~2일 내 처리). 지연 시 고객센터로 문의해 주세요.";
+          setRefundPendingNotice(msg);
           setActiveOrder(null);
           throw new Error(msg);
         }
@@ -438,6 +455,7 @@ function InterviewContent({ kakaoChannelUrl }: { kakaoChannelUrl?: string | null
               guaranteeBenefitText={INTERVIEW_BENEFIT_TEXT}
               error={error}
               refundNotice={refundNotice}
+              refundPendingNotice={refundPendingNotice}
               activeOrder={activeOrder}
               onUseActiveOrder={() => activeOrder && handleGenerate(activeOrder.orderId)}
               paymentState={paymentState}

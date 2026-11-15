@@ -12,6 +12,7 @@ import {
 } from "@/lib/orders";
 import { normalizeEmail } from "@/lib/policy";
 import type { ServiceType } from "@/lib/results";
+import { BUSINESS_INFO } from "@/lib/siteConfig";
 
 /**
  * 토스 결제 승인 공통 라우트 핸들러 (/api/payments/success, /api/interview/payment 공용)
@@ -121,6 +122,19 @@ export async function executePaidGeneration(options: {
 
   const begin = await beginPaidGeneration({ orderId, serviceType });
   if (!begin.ok) {
+    if (begin.code === "REFUND_PENDING") {
+      return NextResponse.json(
+        {
+          error: begin.message,
+          code: begin.code,
+          refundPending: true,
+          refunded: false,
+          supportEmail: BUSINESS_INFO.email,
+          kakaoChannelUrl: BUSINESS_INFO.kakaoChannelUrl,
+        },
+        { status: begin.status }
+      );
+    }
     return NextResponse.json(
       { error: begin.message, code: begin.code },
       { status: begin.status }
@@ -233,15 +247,17 @@ export async function executePaidGeneration(options: {
         error: `Critical: Paid generation failed AND automatic Toss refund failed (${failure.cancelResult.errorMessage || "unknown"})`,
         orderId,
         serviceType,
-        extra: { stage: "auto_refund_failed" },
+        extra: { stage: "refund_failed" },
       });
 
       return NextResponse.json(
         {
           error:
-            "생성 중 오류가 발생했으며 자동 환불 확인이 필요합니다. 고객센터로 주문번호와 함께 문의해 주세요.",
-          code: "AUTO_REFUND_FAILED",
+            "환불 처리 중입니다(영업일 기준 1~2일 내 처리). 지연 시 고객센터로 문의해 주세요.",
+          refundPending: true,
           refunded: false,
+          supportEmail: BUSINESS_INFO.email,
+          kakaoChannelUrl: BUSINESS_INFO.kakaoChannelUrl,
           order: {
             orderId: failure.order.orderId,
             status: failure.order.status,

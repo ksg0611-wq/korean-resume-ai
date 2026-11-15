@@ -8,15 +8,15 @@ export type ThinkingLevel = "minimal" | "low" | "medium" | "high";
 
 /**
  * 서비스 전역 Gemini 모델 및 추론 강도 · 시간 예산 공통 설정
- * - Vercel maxDuration = 60초 초과(504) 방지를 위해 개별 호출 22초,
- *   초기 1회 + 폴백 모델 1회 총 45초 시간 예산을 엄격히 적용합니다.
+ * - Vercel maxDuration = 60초 초과(504) 방지를 위해 개별 호출 20초,
+ *   초기 1회 + 폴백 모델 1회 총 40초 시간 예산을 엄격히 적용합니다. (잔여 20초는 자동 환불 등 안전 여유)
  */
 export const GEMINI_CONFIG = {
   PRIMARY_MODEL: "gemini-3.8-flash",
   FALLBACK_MODEL: "gemini-3.7-flash",
   THINKING_LEVEL: "medium" as ThinkingLevel,
-  PER_ATTEMPT_TIMEOUT_MS: 22_000,
-  TOTAL_BUDGET_MS: 45_000,
+  PER_ATTEMPT_TIMEOUT_MS: 20_000,
+  TOTAL_BUDGET_MS: 40_000,
 } as const;
 
 interface ThinkingGenerationConfig extends GenerationConfig {
