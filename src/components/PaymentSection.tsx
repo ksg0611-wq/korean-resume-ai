@@ -90,7 +90,16 @@ export default function PaymentSection({
           onChange={(e) => onAgreedChange(e.target.checked)}
         />
         <span className="text-xs sm:text-sm text-gray-700 leading-relaxed break-keep">
-          <strong>[필수]</strong> 결제 완료 시 즉시 AI 생성이 시작되는 디지털 콘텐츠 특성상, 생성 시작 후 단순 변심에 의한 환불이 불가함에 동의합니다. (시스템 오류 시 100% 전액 환불)
+          <strong>[필수]</strong> 결제 완료 시 즉시 AI 생성이 시작되는 디지털 콘텐츠 특성상, 생성 시작 후 단순 변심에 의한 환불이 불가함에 동의합니다. (시스템 오류 시 100% 전액 환불){" "}
+          <a
+            href="/refund"
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="text-blue-600 underline font-semibold whitespace-nowrap"
+          >
+            환불정책 보기
+          </a>
         </span>
       </label>
 
@@ -158,6 +167,14 @@ export default function PaymentSection({
           </div>
         </div>
       )}
+
+      {/* 국외 이전(Google) 고지: 결제·무료 생성 버튼 공통 적용 */}
+      <p className="text-[11px] sm:text-xs text-gray-500 text-center break-keep">
+        입력 내용은 AI 생성을 위해 Google 서버로 전송되며 저장되지 않습니다.{" "}
+        <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">
+          개인정보처리방침
+        </a>
+      </p>
 
       {/* [상시 파란색 활성 결제 버튼] (회색 비활성 제거, 10초 타임아웃 상태 머신) */}
       <button

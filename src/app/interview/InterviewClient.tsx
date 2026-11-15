@@ -285,6 +285,8 @@ function InterviewContent() {
               </div>
               <p className="text-xs text-gray-500 break-keep">
                 자소서 원문 또는 검증받고 싶은 프로젝트 경험을 자유롭게 붙여넣어 주세요.
+                <br />
+                <span className="text-red-600 font-semibold">주민번호·연락처 등 민감정보는 입력하지 마세요.</span>
               </p>
               <textarea
                 id="interview-textarea"

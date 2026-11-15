@@ -402,6 +402,8 @@ export default function Home() {
           </div>
           <p className="text-xs text-gray-500 mb-3 break-keep">
             완벽한 문장이 아니어도 괜찮습니다. 생각나는 단어나 활동 메모만 편하게 적어주시면 AI가 STAR(상황·과제·행동·결과) 기법으로 완성합니다.
+            <br />
+            <span className="text-red-600 font-semibold">주민번호·연락처 등 민감정보는 입력하지 마세요.</span>
           </p>
 
           {/* 선택된 공고 타겟팅 배지 (URL 파라미터 유입 시 노출, textarea 오염 방지) */}
