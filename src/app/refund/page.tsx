@@ -27,7 +27,7 @@ export default function RefundPage() {
       </PolicySection>
       <PolicySection heading="3. 환불 문의 방법">
         <p>이메일({b.email})로 결제 시 사용한 주문번호와 문의 내용을 보내주세요.</p>
-        <p>고객센터: {b.csPhone}</p>
+        {b.csPhone && <p>{`고객센터: ${b.csPhone}`}</p>}
       </PolicySection>
     </PolicyShell>
   );

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import PolicyShell, { PolicySection } from "@/components/PolicyShell";
+import { PAID_GENERATIONS } from "@/lib/policy";
 
 export const metadata: Metadata = {
   title: "이용약관 | Korea Resume AI",
@@ -26,6 +27,9 @@ export default function TermsPage() {
         <p>
           유료 서비스의 결제는 토스페이먼츠를 통해 처리되며, 청약철회 및 환불에 관한 사항은{" "}
           <Link href="/refund" className="text-blue-600 underline">환불정책</Link>에 따릅니다.
+        </p>
+        <p>
+          {`유료 이용권(${PAID_GENERATIONS}회 생성권)의 유효기간은 구매일로부터 1년이며, 유효기간이 경과하면 잔여 생성 횟수는 자동 소멸됩니다.`}
         </p>
       </PolicySection>
       <PolicySection heading="제5조 (개인정보 보호)">

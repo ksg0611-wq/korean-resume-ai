@@ -92,14 +92,14 @@ export default function PrivacyPage() {
                 <td className={td}>24시간 윈도우 기준, 최대 약 48시간 후 자동 만료</td>
               </tr>
               <tr>
-                <td className={td}>주문번호·잔여 생성 횟수</td>
+                <td className={td}>서비스 이용권 식별 키(order:*) · 잔여 생성 횟수</td>
                 <td className={td}>Redis</td>
-                <td className={td}>이용권 관리를 위해 보관하며 별도의 자동 만료를 두지 않습니다. 삭제를 요청하시면 지체 없이 삭제합니다.</td>
+                <td className={td}>구매일로부터 1년간(31,536,000초) 보관 후 자동 파기됩니다. 삭제를 요청하시면 그 전이라도 지체 없이 삭제합니다.</td>
               </tr>
               <tr>
-                <td className={td}>결제 거래 기록</td>
+                <td className={td}>대금결제 기록</td>
                 <td className={td}>토스페이먼츠</td>
-                <td className={td}>「전자상거래 등에서의 소비자보호에 관한 법률」에 따라 5년</td>
+                <td className={td}>「전자상거래 등에서의 소비자보호에 관한 법률」에 따라 5년간 보관</td>
               </tr>
               <tr>
                 <td className={td}>사전 알림 신청 이메일</td>
@@ -109,6 +109,9 @@ export default function PrivacyPage() {
             </tbody>
           </table>
         </div>
+        <p className="text-xs text-gray-600">
+          대금결제 기록은 전자상거래법에 따라 토스페이먼츠를 통해 5년간 보관되며, 서비스 이용권 식별 키(order:*)는 구매일로부터 1년간 보관 후 자동 파기됩니다.
+        </p>
       </PolicySection>
 
       <PolicySection heading="3. 개인정보 처리위탁 및 국외 이전">
@@ -121,7 +124,7 @@ export default function PrivacyPage() {
               <tr><th className={th}>이전 일시 및 방법</th><td className={td}>이용자가 &quot;생성&quot;을 요청하는 시점에 암호화된 네트워크(HTTPS)를 통해 전송</td></tr>
               <tr><th className={th}>이전 항목</th><td className={td}>이용자가 입력한 자기소개서 텍스트(및 지원 직무명)</td></tr>
               <tr><th className={th}>이용 목적</th><td className={td}>AI 문장 생성</td></tr>
-              <tr><th className={th}>보유·이용 기간</th><td className={td}>생성 즉시 처리하며 회사는 저장하지 않습니다. (수탁자의 자체 보관·처리 정책은 Google의 API 약관 및 개인정보처리방침에 따릅니다.)</td></tr>
+              <tr><th className={th}>보유·이용 기간</th><td className={td}>생성 즉시 처리하며 회사는 저장하지 않습니다. 입력 데이터는 Google의 유료 API 정책에 따라 모델 학습에 사용되지 않습니다. (그 밖의 처리 정책은 Google의 API 약관 및 개인정보처리방침에 따릅니다.)</td></tr>
               <tr><th className={th}>이전 거부 방법 및 효과</th><td className={td}>이용자는 생성 기능을 사용하지 않음으로써 국외 이전을 거부할 수 있으며, 이 경우 AI 생성 기능은 이용할 수 없습니다. 문의: {b.email}</td></tr>
             </tbody>
           </table>
@@ -161,7 +164,9 @@ export default function PrivacyPage() {
 
       <PolicySection heading="6. 개인정보 보호책임자">
         <p>
-          성명: {b.representative} (대표자) · 이메일: {b.email} · 고객센터: {b.csPhone}
+          {b.csPhone
+            ? `성명: ${b.representative} (대표자) · 이메일: ${b.email} · 고객센터: ${b.csPhone}`
+            : `성명: ${b.representative} (대표자) · 이메일: ${b.email}`}
         </p>
       </PolicySection>
 

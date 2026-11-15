@@ -106,10 +106,14 @@ export async function POST(req: Request) {
     if (!isFree && orderId && redis) {
       const orderData: any = await redis.get(`order:${orderId}`);
       if (orderData && orderData.remainingGenerations > 0) {
-        await redis.set(`order:${orderId}`, {
-          ...orderData,
-          remainingGenerations: orderData.remainingGenerations - 1,
-        });
+        await redis.set(
+          `order:${orderId}`,
+          {
+            ...orderData,
+            remainingGenerations: orderData.remainingGenerations - 1,
+          },
+          { keepTtl: true }
+        );
       }
     }
 

@@ -4,7 +4,7 @@ import { BUSINESS_INFO, POLICY_LINKS } from "@/lib/siteConfig";
 /**
  * 서버 컴포넌트 푸터.
  * 사업자 정보는 src/lib/siteConfig.ts 한 곳에서 관리하며,
- * 약관·방침은 모달이 아닌 독립 URL(<a href>)로 연결합니다.
+ * 미설정 환경변수 항목(통신판매업 신고번호·고객센터 연락처·카카오톡 채널)은 자리표시자 없이 미렌더링합니다.
  */
 export default function Footer() {
   const b = BUSINESS_INFO;
@@ -18,9 +18,24 @@ export default function Footer() {
               {`상호: ${b.companyName} (${b.companyNameEn}) | 대표자명: ${b.representative}`}
             </p>
             <p>{`사업자등록번호: ${b.businessRegistrationNo}`}</p>
-            <p>{`통신판매업 신고번호: ${b.mailOrderSalesNo}`}</p>
+            {b.mailOrderSalesNo && <p>{`통신판매업 신고번호: ${b.mailOrderSalesNo}`}</p>}
             <p>{`주소: ${b.address}`}</p>
-            <p>{`고객센터: ${b.csPhone} | 이메일: ${b.email}`}</p>
+            <p>
+              {b.csPhone ? `고객센터: ${b.csPhone} | 이메일: ${b.email}` : `이메일: ${b.email}`}
+              {b.kakaoChannelUrl && (
+                <>
+                  {" | "}
+                  <a
+                    href={b.kakaoChannelUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline hover:text-blue-600 transition"
+                  >
+                    카카오톡 채널
+                  </a>
+                </>
+              )}
+            </p>
           </div>
 
           <nav

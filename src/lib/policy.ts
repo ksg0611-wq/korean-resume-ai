@@ -17,6 +17,9 @@ export const FREE_LIMIT_WINDOW = "24 h" as const;
 /** 1회 결제(4,900원)당 제공되는 생성/재생성 횟수 (Redis remainingGenerations 초기값) */
 export const PAID_GENERATIONS = 3;
 
+/** 유료 이용권 식별 키(order:*) Redis 보관 기간 (1년 = 31,536,000초) */
+export const PAID_ORDER_TTL_SECONDS = 31_536_000;
+
 export type FreeLimitKind = keyof typeof FREE_LIMITS;
 
 export function freeLimitButtonText(kind: FreeLimitKind): string {

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { Redis } from "@upstash/redis";
-import { PAID_GENERATIONS } from "@/lib/policy";
+import { PAID_GENERATIONS, PAID_ORDER_TTL_SECONDS } from "@/lib/policy";
+import { requireRedisClient } from "@/lib/redis";
 
 export async function POST(req: Request) {
   try {
@@ -38,16 +38,17 @@ export async function POST(req: Request) {
 
     const paymentData = await response.json();
 
-    // Redis에 결제 정보 기록 (3회권)
-    const redis = new Redis({
-      url: process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL || "",
-      token: process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN || "",
-    });
+    // Redis에 결제 정보 기록 (3회권, 1년 TTL)
+    const redis = requireRedisClient();
 
-    await redis.set(`order:${orderId}`, {
-      paid: true,
-      remainingGenerations: PAID_GENERATIONS,
-    });
+    await redis.set(
+      `order:${orderId}`,
+      {
+        paid: true,
+        remainingGenerations: PAID_GENERATIONS,
+      },
+      { ex: PAID_ORDER_TTL_SECONDS }
+    );
 
     return NextResponse.json({ success: true, payment: paymentData });
   } catch (error) {

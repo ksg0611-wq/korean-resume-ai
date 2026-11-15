@@ -70,11 +70,15 @@ export async function POST(req: Request) {
         );
       }
 
-      // Decrement the remaining generations
-      await redis.set(orderKey, {
-        ...orderData,
-        remainingGenerations: orderData.remainingGenerations - 1,
-      });
+      // Decrement the remaining generations (preserve existing 1-year TTL)
+      await redis.set(
+        orderKey,
+        {
+          ...orderData,
+          remainingGenerations: orderData.remainingGenerations - 1,
+        },
+        { keepTtl: true }
+      );
     }
 
     // ── Prompt Engineering ──
