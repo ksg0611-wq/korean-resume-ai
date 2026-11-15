@@ -1,7 +1,13 @@
 import { requireRedisCredentials } from "@/lib/redisConfig";
 
 export type ServiceType = "resume" | "interview";
-export type OrderStatus = "paid" | "generating" | "done" | "refunded" | "failed";
+export type OrderStatus =
+  | "paid"
+  | "generating"
+  | "done"
+  | "refunded"
+  | "refund_failed"
+  | "failed";
 
 export interface OrderRecord {
   orderId: string;
@@ -17,6 +23,9 @@ export interface OrderRecord {
   usedCount: number;
   paidAt: string;
   generatingAt?: string | null;
+  generatingAtMs?: number | null;
+  generatingLockToken?: string | null;
+  reservedGeneration?: boolean;
   doneAt?: string | null;
   failedAt?: string | null;
   refundedAt?: string | null;

@@ -20,7 +20,213 @@ import { cancelTossPayment, type TossCancelResult } from "@/lib/toss";
 import { sanitizeErrorText } from "@/lib/alerts";
 
 export const ORDER_INDEX_KEY = "orders:index";
-const GENERATING_STALE_MS = 55_000;
+export const GENERATING_STALE_MS = 180_000;
+export const GENERATING_LOCK_TTL_SECONDS = 180;
+
+export function getOrderLockKey(orderKey: string): string {
+  return `lock:${orderKey}`;
+}
+
+const BEGIN_GENERATION_LUA = `
+local rawStr = redis.call("GET", KEYS[1])
+if not rawStr then
+  return cjson.encode({
+    ok = false,
+    status = 403,
+    code = "INVALID_ORDER",
+    message = "Forbidden. Invalid payment info or generations exhausted."
+  })
+end
+
+local okDecode, order = pcall(cjson.decode, rawStr)
+if not okDecode or type(order) ~= "table" then
+  return cjson.encode({
+    ok = false,
+    status = 403,
+    code = "INVALID_ORDER",
+    message = "Forbidden. Invalid payment info or generations exhausted."
+  })
+end
+
+if order.status == "refunded" then
+  return cjson.encode({
+    ok = false,
+    status = 403,
+    code = "ORDER_REFUNDED",
+    message = "이미 자동 환불 처리되어 무효화된 주문입니다."
+  })
+end
+
+if order.status == "refund_failed" then
+  return cjson.encode({
+    ok = false,
+    status = 409,
+    code = "REFUND_PENDING",
+    message = "환불 처리 중입니다(영업일 기준 1~2일 내 처리). 지연 시 고객센터로 문의해 주세요."
+  })
+end
+
+if order.paid ~= true then
+  return cjson.encode({
+    ok = false,
+    status = 403,
+    code = "GENERATIONS_EXHAUSTED",
+    message = "Forbidden. Invalid payment info or generations exhausted."
+  })
+end
+
+local nowIso = ARGV[1]
+local nowMs = tonumber(ARGV[2])
+local staleMs = tonumber(ARGV[3])
+local lockTtlSeconds = tonumber(ARGV[4])
+local lockToken = ARGV[5]
+local defaultTotal = tonumber(ARGV[6])
+
+local totalGenerations = tonumber(order.totalGenerations) or defaultTotal
+local remaining = tonumber(order.remainingGenerations)
+local usedCount = tonumber(order.usedCount)
+
+local lockVal = redis.call("GET", KEYS[2])
+local genAtMs = tonumber(order.generatingAtMs)
+local elapsed = nil
+if genAtMs then
+  elapsed = nowMs - genAtMs
+end
+
+if lockVal ~= false then
+  if not (order.status == "generating" and elapsed ~= nil and elapsed >= staleMs) then
+    return cjson.encode({
+      ok = false,
+      status = 409,
+      code = "GENERATION_IN_PROGRESS",
+      message = "이미 AI 생성이 진행 중입니다. 잠시만 기다려 주세요."
+    })
+  end
+elseif order.status == "generating" then
+  if elapsed ~= nil and elapsed >= 0 and elapsed < staleMs then
+    return cjson.encode({
+      ok = false,
+      status = 409,
+      code = "GENERATION_IN_PROGRESS",
+      message = "이미 AI 생성이 진행 중입니다. 잠시만 기다려 주세요."
+    })
+  end
+end
+
+-- Recover crashed generating slot if pre-decremented reservation never completed
+if order.status == "generating" and order.reservedGeneration == true then
+  if remaining == nil then
+    remaining = 0
+  end
+  remaining = math.min(totalGenerations, remaining + 1)
+  order.reservedGeneration = false
+end
+
+if remaining == nil or remaining < 1 then
+  if order.status == "generating" then
+    if usedCount ~= nil and usedCount > 0 then
+      order.status = "done"
+    else
+      order.status = "paid"
+    end
+    order.generatingLockToken = cjson.null
+    order.generatingAtMs = cjson.null
+    order.reservedGeneration = false
+    order.updatedAt = nowIso
+    local ttl = redis.call("TTL", KEYS[1])
+    if ttl and ttl > 0 then
+      redis.call("SET", KEYS[1], cjson.encode(order), "EX", ttl)
+    else
+      redis.call("SET", KEYS[1], cjson.encode(order))
+    end
+    redis.call("DEL", KEYS[2])
+  end
+  return cjson.encode({
+    ok = false,
+    status = 403,
+    code = "GENERATIONS_EXHAUSTED",
+    message = "Forbidden. Invalid payment info or generations exhausted."
+  })
+end
+
+if usedCount == nil then
+  usedCount = math.max(0, totalGenerations - remaining)
+end
+
+order.orderId = order.orderId or ARGV[7]
+order.serviceType = order.serviceType or ARGV[8]
+order.paymentKey = order.paymentKey or ""
+if type(order.amount) ~= "number" then
+  order.amount = 4900
+end
+order.paid = true
+order.status = "generating"
+order.totalGenerations = totalGenerations
+order.remainingGenerations = remaining - 1
+order.reservedGeneration = true
+order.usedCount = usedCount
+order.paidAt = order.paidAt or nowIso
+order.generatingAt = nowIso
+order.generatingAtMs = nowMs
+order.generatingLockToken = lockToken
+order.updatedAt = nowIso
+
+redis.call("SET", KEYS[2], lockToken, "EX", lockTtlSeconds)
+
+local ttl = redis.call("TTL", KEYS[1])
+local encoded = cjson.encode(order)
+if ttl and ttl > 0 then
+  redis.call("SET", KEYS[1], encoded, "EX", ttl)
+else
+  redis.call("SET", KEYS[1], encoded)
+end
+
+return cjson.encode({
+  ok = true,
+  order = order
+})
+`;
+
+const SAVE_AND_RELEASE_LOCK_LUA = `
+local currentLock = redis.call("GET", KEYS[2])
+local expectedToken = ARGV[2]
+local forceSave = ARGV[3]
+
+if forceSave ~= "1" and currentLock ~= false and expectedToken ~= "" and currentLock ~= expectedToken then
+  return 0
+end
+
+local ttl = redis.call("TTL", KEYS[1])
+if ttl and ttl > 0 then
+  redis.call("SET", KEYS[1], ARGV[1], "EX", ttl)
+else
+  redis.call("SET", KEYS[1], ARGV[1])
+end
+
+if expectedToken == "" or currentLock == expectedToken then
+  redis.call("DEL", KEYS[2])
+end
+return 1
+`;
+
+async function persistOrderAndReleaseLock(options: {
+  orderKey: string;
+  order: OrderRecord;
+  expectedLockToken?: string | null;
+  forceSave?: boolean;
+}): Promise<void> {
+  const redis = requireRedisClient();
+  const lockKey = getOrderLockKey(options.orderKey);
+  await redis.eval(
+    SAVE_AND_RELEASE_LOCK_LUA,
+    [options.orderKey, lockKey],
+    [
+      JSON.stringify(options.order),
+      options.expectedLockToken ?? "",
+      options.forceSave ? "1" : "0",
+    ]
+  );
+}
 
 async function indexOrderKey(orderKey: string): Promise<void> {
   const redis = requireRedisClient();
@@ -68,6 +274,9 @@ export async function saveConfirmedOrder(options: {
     usedCount: 0,
     paidAt: now,
     generatingAt: null,
+    generatingAtMs: null,
+    generatingLockToken: null,
+    reservedGeneration: false,
     doneAt: null,
     failedAt: null,
     refundedAt: null,
@@ -92,8 +301,15 @@ export type BeginGenerationResult =
   | { ok: true; orderKey: string; order: OrderRecord }
   | { ok: false; status: number; message: string; code: string };
 
+type BeginGenerationLuaResult =
+  | { ok: true; order: OrderRecord }
+  | { ok: false; status: number; code: string; message: string };
+
 /**
- * 유료 생성 시작 전 주문 검증 및 status -> "generating" 전이
+ * 유료 생성 시작 전 Redis Lua 원자 연산:
+ * - 잔여 횟수 1회 선차감(예약) + status: "generating" 전이 + lock 키(TTL 180초) 설정
+ * - 동시 요청은 즉시 409 Conflict 반환
+ * - 180초 이상 고착된 generating 주문은 자동 복구 후 재시도 허용
  */
 export async function beginPaidGeneration(options: {
   orderId: string;
@@ -102,85 +318,44 @@ export async function beginPaidGeneration(options: {
   const { orderId, serviceType } = options;
   const redis = requireRedisClient();
   const orderKey = getOrderKey(orderId, serviceType);
-  const raw = await redis.get<Partial<OrderRecord>>(orderKey);
+  const lockKey = getOrderLockKey(orderKey);
+  const nowMs = Date.now();
+  const nowIso = new Date(nowMs).toISOString();
+  const lockToken = generateSecureToken();
 
-  if (!raw) {
+  const rawEval = await redis.eval<string[], string | BeginGenerationLuaResult>(
+    BEGIN_GENERATION_LUA,
+    [orderKey, lockKey],
+    [
+      nowIso,
+      String(nowMs),
+      String(GENERATING_STALE_MS),
+      String(GENERATING_LOCK_TTL_SECONDS),
+      lockToken,
+      String(PAID_GENERATIONS),
+      orderId,
+      serviceType,
+    ]
+  );
+
+  const parsed: BeginGenerationLuaResult =
+    typeof rawEval === "string"
+      ? (JSON.parse(rawEval) as BeginGenerationLuaResult)
+      : rawEval;
+
+  if (!parsed || !parsed.ok) {
     return {
       ok: false,
-      status: 403,
-      code: "INVALID_ORDER",
-      message: "Forbidden. Invalid payment info or generations exhausted.",
+      status: parsed?.status ?? 500,
+      code: parsed?.code ?? "ORDER_LOCK_FAILED",
+      message:
+        parsed?.message ??
+        "주문 상태를 확인하는 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.",
     };
   }
 
-  if (raw.status === "refunded") {
-    return {
-      ok: false,
-      status: 403,
-      code: "ORDER_REFUNDED",
-      message: "이미 자동 환불 처리되어 무효화된 주문입니다.",
-    };
-  }
-
-  if (
-    !raw.paid ||
-    typeof raw.remainingGenerations !== "number" ||
-    raw.remainingGenerations < 1
-  ) {
-    return {
-      ok: false,
-      status: 403,
-      code: "GENERATIONS_EXHAUSTED",
-      message: "Forbidden. Invalid payment info or generations exhausted.",
-    };
-  }
-
-  // 동시 중복 요청 방어 (직전 generating 시작 후 55초 이내면 409)
-  if (raw.status === "generating" && raw.generatingAt) {
-    const elapsed = Date.now() - Date.parse(raw.generatingAt);
-    if (Number.isFinite(elapsed) && elapsed >= 0 && elapsed < GENERATING_STALE_MS) {
-      return {
-        ok: false,
-        status: 409,
-        code: "GENERATION_IN_PROGRESS",
-        message: "이미 AI 생성이 진행 중입니다. 잠시만 기다려 주세요.",
-      };
-    }
-  }
-
-  const now = new Date().toISOString();
-  const normalized: OrderRecord = {
-    orderId: raw.orderId || orderId,
-    serviceType: raw.serviceType || serviceType,
-    paymentKey: raw.paymentKey || "",
-    amount: typeof raw.amount === "number" ? raw.amount : 4900,
-    email: raw.email ?? null,
-    receiptUrl: raw.receiptUrl ?? null,
-    paid: true,
-    status: "generating",
-    totalGenerations: raw.totalGenerations ?? PAID_GENERATIONS,
-    remainingGenerations: raw.remainingGenerations,
-    usedCount: typeof raw.usedCount === "number" ? raw.usedCount : Math.max(0, PAID_GENERATIONS - raw.remainingGenerations),
-    paidAt: raw.paidAt || now,
-    generatingAt: now,
-    doneAt: raw.doneAt ?? null,
-    failedAt: raw.failedAt ?? null,
-    refundedAt: raw.refundedAt ?? null,
-    updatedAt: now,
-    usedModel: raw.usedModel ?? null,
-    lastError: raw.lastError ?? null,
-    refundAmount: raw.refundAmount ?? null,
-    refundTransactionKey: raw.refundTransactionKey ?? null,
-    refundReason: raw.refundReason ?? null,
-    resultTokenHash: raw.resultTokenHash ?? null,
-    resultExpiresAt: raw.resultExpiresAt ?? null,
-    verified: raw.verified,
-  };
-
-  await redis.set(orderKey, normalized, { keepTtl: true });
   await indexOrderKey(orderKey);
-
-  return { ok: true, orderKey, order: normalized };
+  return { ok: true, orderKey, order: parsed.order };
 }
 
 /**
@@ -230,11 +405,19 @@ export async function completePaidGeneration(options: {
 
   await redis.set(resultKey, storedResult, { ex: RESULT_TTL_SECONDS });
 
+  const lockToken = order.generatingLockToken ?? null;
+  const remainingGenerations = order.reservedGeneration
+    ? order.remainingGenerations
+    : Math.max(0, order.remainingGenerations - 1);
+
   const updatedOrder: OrderRecord = {
     ...order,
     status: "done",
     usedCount: (order.usedCount ?? 0) + 1,
-    remainingGenerations: Math.max(0, order.remainingGenerations - 1),
+    remainingGenerations,
+    reservedGeneration: false,
+    generatingLockToken: null,
+    generatingAtMs: null,
     doneAt: nowIso,
     updatedAt: nowIso,
     usedModel,
@@ -243,7 +426,11 @@ export async function completePaidGeneration(options: {
     resultExpiresAt: expiresAtIso,
   };
 
-  await redis.set(orderKey, updatedOrder, { keepTtl: true });
+  await persistOrderAndReleaseLock({
+    orderKey,
+    order: updatedOrder,
+    expectedLockToken: lockToken,
+  });
   await indexOrderKey(orderKey);
 
   return {
@@ -282,19 +469,31 @@ export async function handlePaidGenerationFailure(options: {
   route: string;
 }): Promise<FailureHandlingOutcome> {
   const { orderKey, order, error, route } = options;
-  const redis = requireRedisClient();
   const nowIso = new Date().toISOString();
   const safeErr = sanitizeErrorText(error);
+  const lockToken = order.generatingLockToken ?? null;
+  const totalGenerations = order.totalGenerations ?? PAID_GENERATIONS;
+  const restoredRemaining = order.reservedGeneration
+    ? Math.min(totalGenerations, order.remainingGenerations + 1)
+    : order.remainingGenerations;
 
   if ((order.usedCount ?? 0) > 0) {
     const recoveredOrder: OrderRecord = {
       ...order,
       status: "done",
+      remainingGenerations: restoredRemaining,
+      reservedGeneration: false,
+      generatingLockToken: null,
+      generatingAtMs: null,
       failedAt: nowIso,
       updatedAt: nowIso,
       lastError: safeErr,
     };
-    await redis.set(orderKey, recoveredOrder, { keepTtl: true });
+    await persistOrderAndReleaseLock({
+      orderKey,
+      order: recoveredOrder,
+      expectedLockToken: lockToken,
+    });
     await indexOrderKey(orderKey);
     return { outcome: "retry_allowed", order: recoveredOrder };
   }
@@ -303,12 +502,21 @@ export async function handlePaidGenerationFailure(options: {
   if (!order.paymentKey) {
     const failedOrder: OrderRecord = {
       ...order,
-      status: "failed",
+      status: "refund_failed",
+      remainingGenerations: restoredRemaining,
+      reservedGeneration: false,
+      generatingLockToken: null,
+      generatingAtMs: null,
       failedAt: nowIso,
       updatedAt: nowIso,
       lastError: `Missing paymentKey for auto-refund (${safeErr})`,
     };
-    await redis.set(orderKey, failedOrder, { keepTtl: true });
+    await persistOrderAndReleaseLock({
+      orderKey,
+      order: failedOrder,
+      expectedLockToken: lockToken,
+      forceSave: true,
+    });
     await indexOrderKey(orderKey);
     return {
       outcome: "refund_failed",
@@ -338,6 +546,9 @@ export async function handlePaidGenerationFailure(options: {
       ...order,
       paid: false,
       remainingGenerations: 0,
+      reservedGeneration: false,
+      generatingLockToken: null,
+      generatingAtMs: null,
       status: "refunded",
       failedAt: nowIso,
       refundedAt: nowIso,
@@ -351,7 +562,12 @@ export async function handlePaidGenerationFailure(options: {
       lastError: safeErr,
     };
 
-    await redis.set(orderKey, refundedOrder, { keepTtl: true });
+    await persistOrderAndReleaseLock({
+      orderKey,
+      order: refundedOrder,
+      expectedLockToken: lockToken,
+      forceSave: true,
+    });
     await indexOrderKey(orderKey);
 
     return {
@@ -363,12 +579,21 @@ export async function handlePaidGenerationFailure(options: {
 
   const failedOrder: OrderRecord = {
     ...order,
-    status: "failed",
+    status: "refund_failed",
+    remainingGenerations: restoredRemaining,
+    reservedGeneration: false,
+    generatingLockToken: null,
+    generatingAtMs: null,
     failedAt: nowIso,
     updatedAt: nowIso,
     lastError: `${safeErr} | Auto-refund failed: ${cancelResult.errorMessage || cancelResult.status}`,
   };
-  await redis.set(orderKey, failedOrder, { keepTtl: true });
+  await persistOrderAndReleaseLock({
+    orderKey,
+    order: failedOrder,
+    expectedLockToken: lockToken,
+    forceSave: true,
+  });
   await indexOrderKey(orderKey);
 
   return {
