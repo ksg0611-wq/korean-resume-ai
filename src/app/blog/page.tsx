@@ -5,13 +5,13 @@ import { blogPosts } from '@/lib/blogData';
 export async function generateMetadata(): Promise<Metadata> {
   return {
     title: '취업 가이드 블로그 | Korea Resume AI',
-    description: '서류 통과부터 면접까지, 검증된 취업 꿀팁과 합격하는 자소서 작성 가이드를 제공합니다.',
+    description: '서류 통과부터 면접까지, 검증된 취업 꿀팁과 완성도 높은 자소서 작성 가이드를 제공합니다.',
     alternates: {
       canonical: 'https://korea-resume.com/blog',
     },
     openGraph: {
       title: '취업 가이드 블로그 | Korea Resume AI',
-      description: '서류 통과부터 면접까지, 검증된 취업 꿀팁과 합격하는 자소서 작성 가이드를 제공합니다.',
+      description: '서류 통과부터 면접까지, 검증된 취업 꿀팁과 완성도 높은 자소서 작성 가이드를 제공합니다.',
       type: 'website',
       url: '/blog',
     },
@@ -22,7 +22,7 @@ export default function BlogIndex() {
   return (
     <div className="max-w-4xl mx-auto px-4 py-16 flex-1">
       <div className="text-center mb-12">
-        <h1 className="text-3xl font-bold mb-4 text-gray-900">합격을 부르는 취업 가이드</h1>
+        <h1 className="text-3xl font-bold mb-4 text-gray-900">서류·면접 실전 취업 가이드</h1>
         <p className="text-gray-600">서류 통과부터 면접까지, 검증된 취업 꿀팁</p>
       </div>
       

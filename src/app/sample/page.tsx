@@ -12,7 +12,7 @@ import {
 } from "@/lib/sampleData";
 
 export const metadata: Metadata = {
-  title: "합격 자소서 진단·4문항 완성본·면접 10선 샘플 | Korea Resume AI",
+  title: "AI 자소서 진단·4문항 완성본·면접 10선 샘플 | Korea Resume AI",
   description:
     "공공기관 일반행정(경영·회계·사무) 기준 가상 지원자 샘플을 통해 AI 자소서 점수 진단 리포트, 표준 4문항 완성본, 맞춤 면접 질문 10선 품질을 미리 확인하세요.",
   alternates: { canonical: "/sample" },
@@ -172,7 +172,7 @@ export default function SamplePage() {
               href="/?mode=draft"
               className="px-5 py-3 bg-blue-500/40 hover:bg-blue-500/60 border border-white/30 text-white font-bold text-sm rounded-xl transition-colors"
             >
-              메모로 4문항 새로 쓰기
+              메모로 1문항 무료 미리보기
             </Link>
           </div>
         </section>

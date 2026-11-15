@@ -20,33 +20,33 @@ const EXAMPLES: Record<TabKey, ExampleData> = {
   "IT": {
     before: "저는 웹 개발 프로젝트에 참여하여 프론트엔드 기능을 구현했습니다. 팀원들과 협업하며 좋은 결과를 만들었습니다.",
     after: [
-      { tag: "S", label: "Situation (상황)", content: "5인 팀 프로젝트에서 결제 페이지 사용자 이탈률 30% 발생 문제 직면" },
-      { tag: "T/A", label: "Task & Action (과제 및 행동)", content: "React 상태관리 재설계 및 API 캐싱 로직 도입, 2주간 A/B 테스트 주도" },
-      { tag: "R", label: "Result (성과)", content: "결제 완료율 18% 상승, 초기 로딩 시간 1.2초 단축 달성" },
+      { tag: "S", label: "Situation (상황)", content: "팀 프로젝트에서 결제 페이지 사용자 이탈률 [본인 수치 입력] 발생 문제 직면" },
+      { tag: "T/A", label: "Task & Action (과제 및 행동)", content: "React 상태관리 재설계 및 API 캐싱 로직 도입, [본인 수치 입력] 간 A/B 테스트 주도" },
+      { tag: "R", label: "Result (성과)", content: "결제 완료율 [본인 수치 입력] 상승, 초기 로딩 시간 [본인 수치 입력] 단축 달성" },
     ]
   },
   "기획": {
     before: "신규 서비스 기획 업무를 담당했습니다. 시장 조사와 기획서 작성을 통해 프로젝트를 성공적으로 진행했습니다.",
     after: [
-      { tag: "S", label: "Situation (상황)", content: "경쟁사 대비 온보딩 단계 가입 전환율이 40% 저조한 원인 파악 필요" },
-      { tag: "T/A", label: "Task & Action (과제 및 행동)", content: "12건의 심층 인터뷰 및 퍼널 분석을 거쳐 3단계 회원가입을 1단계로 단순화 기획" },
-      { tag: "R", label: "Result (성과)", content: "최종 가입 전환율 22%p 상승 및 핵심 이탈 지점 모니터링 체계 구축" },
+      { tag: "S", label: "Situation (상황)", content: "경쟁사 대비 온보딩 단계 가입 전환율이 [본인 수치 입력] 저조한 원인 파악 필요" },
+      { tag: "T/A", label: "Task & Action (과제 및 행동)", content: "[본인 수치 입력]의 심층 인터뷰 및 퍼널 분석을 거쳐 다단계 회원가입을 단일 단계로 단순화 기획" },
+      { tag: "R", label: "Result (성과)", content: "최종 가입 전환율 [본인 수치 입력] 상승 및 핵심 이탈 지점 모니터링 체계 구축" },
     ]
   },
   "마케팅": {
     before: "SNS 마케팅 캠페인을 기획하고 운영했습니다. 매력적인 콘텐츠 제작과 타겟팅을 통해 좋은 성과를 냈습니다.",
     after: [
-      { tag: "S", label: "Situation (상황)", content: "신규 브랜드 런칭 직후 초기 3주간 한정된 예산 내 인지도 극대화 과제" },
-      { tag: "T/A", label: "Task & Action (과제 및 행동)", content: "숏폼 채널 타겟을 3개 세그먼트로 분리 후 크리에이티브 A/B 테스트 및 주간 예산 리밸런싱" },
-      { tag: "R", label: "Result (성과)", content: "CTR 2.3배 개선 및 광고비 대비 매출액(ROAS) 340% 달성" },
+      { tag: "S", label: "Situation (상황)", content: "신규 브랜드 런칭 직후 초기 [본인 수치 입력] 간 한정된 예산 내 인지도 극대화 과제" },
+      { tag: "T/A", label: "Task & Action (과제 및 행동)", content: "숏폼 채널 타겟을 핵심 세그먼트로 분리 후 크리에이티브 A/B 테스트 및 주간 예산 리밸런싱" },
+      { tag: "R", label: "Result (성과)", content: "CTR [본인 수치 입력] 개선 및 광고비 대비 매출액(ROAS) [본인 수치 입력] 달성" },
     ]
   },
   "기타": {
     before: "고객 응대 업무를 담당하며 다양한 현장 문제를 해결했습니다. 매사에 성실하고 꼼꼼하게 근무했습니다.",
     after: [
-      { tag: "S", label: "Situation (상황)", content: "성수기 고객 문의 폭증으로 팀 평균 응대 소요시간이 목표치를 40분 초과" },
-      { tag: "T/A", label: "Task & Action (과제 및 행동)", content: "최다 빈도 문의 10종 표준 응답 템플릿화 및 1차 처리 자동화 가이드라인 수립" },
-      { tag: "R", label: "Result (성과)", content: "평균 처리시간 35% 단축, CS 만족도 4.6점(5점 만점) 갱신" },
+      { tag: "S", label: "Situation (상황)", content: "성수기 고객 문의 폭증으로 팀 평균 응대 소요시간이 목표치를 [본인 수치 입력] 초과" },
+      { tag: "T/A", label: "Task & Action (과제 및 행동)", content: "최다 빈도 주요 문의 표준 응답 템플릿화 및 1차 처리 자동화 가이드라인 수립" },
+      { tag: "R", label: "Result (성과)", content: "평균 처리시간 [본인 수치 입력] 단축, CS 만족도 [본인 수치 입력] 갱신" },
     ]
   },
 };
