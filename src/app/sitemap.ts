@@ -15,12 +15,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.8,
   }));
 
-  // 약관·정책 독립 페이지
-  const policyUrls: MetadataRoute.Sitemap = ['/about', '/terms', '/privacy', '/refund'].map((path) => ({
+  // 약관·정책·샘플 독립 페이지
+  const policyUrls: MetadataRoute.Sitemap = ['/about', '/sample', '/terms', '/privacy', '/refund'].map((path) => ({
     url: `${baseUrl}${path}`,
     lastModified: new Date(),
-    changeFrequency: 'yearly',
-    priority: 0.3,
+    changeFrequency: path === '/sample' ? 'weekly' : 'yearly',
+    priority: path === '/sample' ? 0.8 : 0.3,
   }));
 
   // 동적 채용공고 상세 페이지 URL (현재 진행 중인 공고 최대 500개 색인)

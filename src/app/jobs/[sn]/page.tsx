@@ -143,6 +143,8 @@ export default async function JobDetailPage({ params }: JobDetailPageProps) {
             instName={job.inst_name}
             jobTitle={job.title}
             srcUrl={job.src_url}
+            dDayLabel={dday.label}
+            isUrgent={dday.isUrgent}
           />
         </div>
 

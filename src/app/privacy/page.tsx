@@ -70,15 +70,17 @@ export default function PrivacyPage() {
             </thead>
             <tbody>
               <tr>
-                <td className={td}>자기소개서·경험 입력 원문</td>
-                <td className={td}>회사 DB·Redis에 저장하지 않음</td>
-                <td className={td}>생성 요청을 처리하는 동안에만 서버 메모리에서 처리하며 생성 즉시 처리 후 폐기합니다 (미저장)</td>
+                <td className={td}>자기소개서·경험 입력 원문 (진단 모드 포함)</td>
+                <td className={td}>회사 DB·Redis에 저장하지 않음 (진단 원문은 이용자 브라우저 로컬에만 임시 보관 후 완성본 생성 시 즉시 폐기)</td>
+                <td className={td}>생성·진단 요청을 처리하는 동안에만 서버 메모리에서 처리하며 요청 처리 즉시 폐기합니다 (미저장).</td>
               </tr>
               <tr>
-                <td className={td}>AI 생성 결과물</td>
-                <td className={td}>무료 체험 결과는 미저장 / 유료 결제 결과는 재열람 링크(result:*) 제공을 위해 Redis에 임시 저장</td>
+                <td className={td}>AI 생성 결과물 및 미리보기 토큰</td>
+                <td className={td}>무료 미리보기(preview:*) 임시 보관 / 유료 결제 결과(result:*) Redis 임시 저장</td>
                 <td className={td}>
-                  유료 결제 결과물은 결과 재열람 링크 제공을 위해 <strong>생성일로부터 7일(604,800초)</strong>간 보관 후 자동 파기됩니다. 무료 체험에서 &quot;면접 꼬리질문 받아보기&quot;로 이어가는 경우에 한해 임시 토큰으로 Redis에 최대 10분 보관되며 조회 즉시 삭제됩니다.
+                  무료 자소서 미리보기 데이터(preview:*, order_preview:*)는 결제 후 잠금 해제를 위해 Redis에{" "}
+                  <strong>최대 2시간(7,200초) 보관 후 1회 사용 또는 만료 시 자동 파기</strong>됩니다. 유료 결제 결과물은 재열람 링크 제공을 위해{" "}
+                  <strong>생성일로부터 7일(604,800초)</strong>간 보관 후 자동 파기되며, 면접 꼬리질문 임시 토큰은 최대 10분 보관 후 조회 즉시 삭제됩니다.
                 </td>
               </tr>
               <tr>
