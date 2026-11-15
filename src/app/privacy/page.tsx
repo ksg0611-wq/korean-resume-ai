@@ -37,8 +37,8 @@ export default function PrivacyPage() {
               </tr>
               <tr>
                 <td className={td}>유료 결제</td>
-                <td className={td}>주문번호, 결제 승인 결과 (카드번호 등 결제수단 정보는 토스페이먼츠 결제창에서 직접 처리되며 회사는 수집·저장하지 않습니다)</td>
-                <td className={td}>결제 승인 확인 및 이용권(생성 횟수) 관리</td>
+                <td className={td}>주문번호, 결제 승인·환불 결과, 이메일 주소 (카드번호 등 결제수단 정보는 토스페이먼츠 결제창에서 직접 처리되며 회사는 수집·저장하지 않습니다)</td>
+                <td className={td}>결제 승인·자동 환불 처리, 이용권 관리, 생성 결과 재열람 링크 및 영수증 안내 발송</td>
               </tr>
               <tr>
                 <td className={td}>무료 체험 제한</td>
@@ -76,9 +76,9 @@ export default function PrivacyPage() {
               </tr>
               <tr>
                 <td className={td}>AI 생성 결과물</td>
-                <td className={td}>회사 DB에 저장하지 않음 (이용자 화면에만 표시)</td>
+                <td className={td}>무료 체험 결과는 미저장 / 유료 결제 결과는 재열람 링크(result:*) 제공을 위해 Redis에 임시 저장</td>
                 <td className={td}>
-                  &quot;면접 꼬리질문 받아보기&quot;를 눌러 이어가는 경우에 한해, 이동을 위한 임시 토큰으로 Redis에 최대 10분 보관되며 조회 즉시 삭제됩니다.
+                  유료 결제 결과물은 결과 재열람 링크 제공을 위해 <strong>생성일로부터 7일(604,800초)</strong>간 보관 후 자동 파기됩니다. 무료 체험에서 &quot;면접 꼬리질문 받아보기&quot;로 이어가는 경우에 한해 임시 토큰으로 Redis에 최대 10분 보관되며 조회 즉시 삭제됩니다.
                 </td>
               </tr>
               <tr>
@@ -146,8 +146,13 @@ export default function PrivacyPage() {
               </tr>
               <tr>
                 <td className={td}>Vercel Inc. / Upstash, Inc. / Supabase, Inc.</td>
-                <td className={td}>웹 호스팅, 이용 횟수 카운터(Redis) 및 데이터베이스 운영 등 클라우드 인프라</td>
+                <td className={td}>웹 호스팅, 이용 횟수 카운터·재열람 링크 임시 저장(Redis) 및 데이터베이스 운영 등 클라우드 인프라</td>
                 <td className={td}>미국(사업자 소재국). 실제 데이터 저장 지역은 각 서비스 설정에 따릅니다.</td>
+              </tr>
+              <tr>
+                <td className={td}>Resend, Inc.</td>
+                <td className={td}>유료 결제 이용자에게 생성 결과 재열람 링크 및 결제 영수증 안내 이메일 발송 (이메일 발송 기능 연동 시)</td>
+                <td className={td}>미국</td>
               </tr>
             </tbody>
           </table>

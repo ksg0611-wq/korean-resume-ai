@@ -1,24 +1,24 @@
 import { NextResponse } from "next/server";
-import type { Redis } from "@upstash/redis";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { GEMINI_CONFIG, generateContentWithFallback } from "@/lib/gemini";
-import { checkFreeRateLimit, requireRedisClient } from "@/lib/redis";
+import { checkFreeRateLimit } from "@/lib/redis";
 import { FREE_LIMITS, FREE_LIMIT_WINDOW } from "@/lib/policy";
+import { executePaidGeneration } from "@/lib/paymentHandlers";
+import { reportServerError } from "@/lib/alerts";
 
 // Vercel Serverless Function Execution Timeout (방어적 60초 설정)
 export const maxDuration = 60;
 
 export async function POST(req: Request) {
-  // Initialize Gemini
   const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "dummy-api-key");
-  let redis: Redis | null = null;
+  let parsedOrderId: string | null = null;
 
   try {
     const body = await req.json();
-    const { jobTitle, memo, isFree, orderId } = body;
+    const { jobTitle, memo, isFree, orderId, email } = body;
+    parsedOrderId = typeof orderId === "string" ? orderId.trim() : null;
 
     // ── Strict Field Validation ──
-    // Reject requests missing required fields or using legacy single-prompt format
     if (typeof jobTitle !== "string" || !jobTitle.trim()) {
       return NextResponse.json(
         { error: "Bad Request. 'jobTitle' (string) is required." },
@@ -37,47 +37,11 @@ export async function POST(req: Request) {
         { status: 400 }
       );
     }
-    // If paid request, orderId must be a non-empty string
-    if (!isFree && (typeof orderId !== "string" || !orderId.trim())) {
+    if (!isFree && (!parsedOrderId || !parsedOrderId.trim())) {
       return NextResponse.json(
         { error: "Bad Request. 'orderId' (string) is required for paid requests." },
         { status: 400 }
       );
-    }
-
-    // ── IP Parsing (proxy-chain safe) ──
-    const ip = (req.headers.get("x-forwarded-for") ?? "127.0.0.1").split(",")[0].trim();
-
-    // ── Rate Limiting / Payment Validation ──
-    if (isFree) {
-      // Free tier: slidingWindow 2 req / 24h per IP (Redis 장애 시 안전 폴백)
-      const allowed = await checkFreeRateLimit({
-        key: `ratelimit_free_${ip}`,
-        maxRequests: FREE_LIMITS.resume,
-        window: FREE_LIMIT_WINDOW,
-      });
-      if (!allowed) {
-        return NextResponse.json(
-          { error: `Too Many Requests. Free tier limit exceeded (${FREE_LIMITS.resume} per 24h).` },
-          { status: 429 }
-        );
-      }
-    } else {
-      // Paid tier: strictly require Redis & validate orderId
-      redis = requireRedisClient();
-      const orderData: any = await redis.get(`order:${orderId}`);
-
-      if (
-        !orderData ||
-        !orderData.paid ||
-        typeof orderData.remainingGenerations !== "number" ||
-        orderData.remainingGenerations < 1
-      ) {
-        return NextResponse.json(
-          { error: "Forbidden. Invalid payment info or generations exhausted." },
-          { status: 403 }
-        );
-      }
     }
 
     // ── Prompt Engineering ──
@@ -93,40 +57,57 @@ export async function POST(req: Request) {
 
     const fullPrompt = `${systemInstruction}\n\n지원 직무: ${jobTitle.trim()}\n\n사용자 경험 요약:\n${memo.trim()}`;
 
-    // Gemini 3.8 Flash (thinkingLevel: medium) 공통 설정 호출
+    if (!isFree && parsedOrderId) {
+      return await executePaidGeneration({
+        serviceType: "resume",
+        routePath: "/api/generate",
+        orderId: parsedOrderId,
+        genAI,
+        prompt: fullPrompt,
+        resultTitle: `AI 자기소개서 초안 (${jobTitle.trim()})`,
+        optionalEmail: email,
+      });
+    }
+
+    // ── Free Tier Rate Limiting & Execution ──
+    const ip = (req.headers.get("x-forwarded-for") ?? "127.0.0.1").split(",")[0].trim();
+    const allowed = await checkFreeRateLimit({
+      key: `ratelimit_free_${ip}`,
+      maxRequests: FREE_LIMITS.resume,
+      window: FREE_LIMIT_WINDOW,
+    });
+    if (!allowed) {
+      return NextResponse.json(
+        { error: `Too Many Requests. Free tier limit exceeded (${FREE_LIMITS.resume} per 24h).` },
+        { status: 429 }
+      );
+    }
+
     const genResult = await generateContentWithFallback(
       genAI,
       fullPrompt,
       GEMINI_CONFIG.PRIMARY_MODEL,
       GEMINI_CONFIG.THINKING_LEVEL
     );
-    const responseText = genResult.text;
-
-    // ── Deduct generation count (paid requests only) ──
-    if (!isFree && orderId && redis) {
-      const orderData: any = await redis.get(`order:${orderId}`);
-      if (orderData && orderData.remainingGenerations > 0) {
-        await redis.set(
-          `order:${orderId}`,
-          {
-            ...orderData,
-            remainingGenerations: orderData.remainingGenerations - 1,
-          },
-          { keepTtl: true }
-        );
-      }
-    }
 
     return NextResponse.json({
       success: true,
-      text: responseText,
+      text: genResult.text,
       usedModel: genResult.usedModel,
       thinkingLevel: genResult.thinkingLevel,
+      attempts: genResult.attempts,
+      durationMs: genResult.durationMs,
       usage: genResult.usage,
     });
-
   } catch (error: any) {
     console.error("Error generating resume:", error);
+    await reportServerError({
+      route: "/api/generate",
+      statusCode: 500,
+      error,
+      orderId: parsedOrderId,
+      serviceType: "resume",
+    });
     return NextResponse.json(
       { error: "Internal Server Error" },
       { status: 500 }

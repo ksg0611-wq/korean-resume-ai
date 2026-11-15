@@ -1,25 +1,22 @@
 import { NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { GEMINI_CONFIG, generateContentWithFallback } from "@/lib/gemini";
-import { checkFreeRateLimit, requireRedisClient } from "@/lib/redis";
+import { checkFreeRateLimit } from "@/lib/redis";
 import { FREE_LIMITS, FREE_LIMIT_WINDOW } from "@/lib/policy";
+import { executePaidGeneration } from "@/lib/paymentHandlers";
+import { reportServerError } from "@/lib/alerts";
 
 // Vercel Serverless Function Execution Timeout (방어적 60초 설정)
 export const maxDuration = 60;
 
-// ── Environment Variables Check ──
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
-
-if (!GEMINI_API_KEY) {
-  console.warn("GEMINI_API_KEY is not set.");
-}
-
-// ── Google Gemini Setup ──
-const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-
 export async function POST(req: Request) {
+  const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "dummy-api-key");
+  let parsedOrderId: string | null = null;
+
   try {
-    const { jobCategory, resumeText, isFree, orderId } = await req.json();
+    const body = await req.json();
+    const { jobCategory, resumeText, isFree, orderId, email } = body;
+    parsedOrderId = typeof orderId === "string" ? orderId.trim() : null;
 
     if (!jobCategory || !resumeText || typeof isFree !== "boolean") {
       return NextResponse.json(
@@ -28,56 +25,10 @@ export async function POST(req: Request) {
       );
     }
 
-    if (!isFree && !orderId) {
+    if (!isFree && !parsedOrderId) {
       return NextResponse.json(
         { error: "orderId is required for paid generation." },
         { status: 400 }
-      );
-    }
-
-    // ── IP Parsing ──
-    const ip = (req.headers.get("x-forwarded-for") ?? "127.0.0.1").split(",")[0].trim();
-
-    // ── Rate Limiting / Payment Validation ──
-    if (isFree) {
-      // Free tier: slidingWindow 1 req / 24h per IP (Redis 장애 시 안전 폴백)
-      const allowed = await checkFreeRateLimit({
-        key: `ratelimit:interview:ip:${ip}`,
-        maxRequests: FREE_LIMITS.interview,
-        window: FREE_LIMIT_WINDOW,
-      });
-      if (!allowed) {
-        return NextResponse.json(
-          { error: `Too Many Requests. Free tier limit exceeded (${FREE_LIMITS.interview} per 24h).` },
-          { status: 429 }
-        );
-      }
-    } else {
-      // Paid tier: strictly require Redis & validate orderId
-      const redis = requireRedisClient();
-      const orderKey = `order:interview:${orderId}`;
-      const orderData: any = await redis.get(orderKey);
-
-      if (
-        !orderData ||
-        !orderData.paid ||
-        typeof orderData.remainingGenerations !== "number" ||
-        orderData.remainingGenerations < 1
-      ) {
-        return NextResponse.json(
-          { error: "Forbidden. Invalid payment info or generations exhausted." },
-          { status: 403 }
-        );
-      }
-
-      // Decrement the remaining generations (preserve existing 1-year TTL)
-      await redis.set(
-        orderKey,
-        {
-          ...orderData,
-          remainingGenerations: orderData.remainingGenerations - 1,
-        },
-        { keepTtl: true }
       );
     }
 
@@ -120,26 +71,59 @@ export async function POST(req: Request) {
 3. 질문 전후에 불필요한 사족(인사말, 응원 등)을 붙이지 말 것.
 `;
 
-    const fullPrompt = `${systemInstruction}\n\n지원자 자기소개서:\n${resumeText.trim()}`;
+    const fullPrompt = `${systemInstruction}\n\n지원자 자기소개서:\n${String(resumeText).trim()}`;
 
-    // Gemini 3.8 Flash (thinkingLevel: medium) 공통 설정 호출
+    if (!isFree && parsedOrderId) {
+      return await executePaidGeneration({
+        serviceType: "interview",
+        routePath: "/api/interview/generate",
+        orderId: parsedOrderId,
+        genAI,
+        prompt: fullPrompt,
+        resultTitle: `AI 면접 꼬리질문 리포트 (${String(jobCategory).trim()})`,
+        optionalEmail: email,
+      });
+    }
+
+    // ── Free Tier Rate Limiting & Execution ──
+    const ip = (req.headers.get("x-forwarded-for") ?? "127.0.0.1").split(",")[0].trim();
+    const allowed = await checkFreeRateLimit({
+      key: `ratelimit:interview:ip:${ip}`,
+      maxRequests: FREE_LIMITS.interview,
+      window: FREE_LIMIT_WINDOW,
+    });
+    if (!allowed) {
+      return NextResponse.json(
+        { error: `Too Many Requests. Free tier limit exceeded (${FREE_LIMITS.interview} per 24h).` },
+        { status: 429 }
+      );
+    }
+
     const genResult = await generateContentWithFallback(
       genAI,
       fullPrompt,
       GEMINI_CONFIG.PRIMARY_MODEL,
       GEMINI_CONFIG.THINKING_LEVEL
     );
-    const responseText = genResult.text;
 
     return NextResponse.json({
       success: true,
-      text: responseText,
+      text: genResult.text,
       usedModel: genResult.usedModel,
       thinkingLevel: genResult.thinkingLevel,
+      attempts: genResult.attempts,
+      durationMs: genResult.durationMs,
       usage: genResult.usage,
     });
   } catch (error: any) {
     console.error("Generate API Error:", error);
+    await reportServerError({
+      route: "/api/interview/generate",
+      statusCode: 500,
+      error,
+      orderId: parsedOrderId,
+      serviceType: "interview",
+    });
     return NextResponse.json(
       { error: "Internal Server Error" },
       { status: 500 }

@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, Suspense } from "react";
 import { loadPaymentWidget, PaymentWidgetInstance } from "@tosspayments/payment-widget-sdk";
 import PaymentSection from "@/components/PaymentSection";
+import PaidResultShareCard, { downloadTextFile } from "@/components/PaidResultShareCard";
 import InterviewPreviewCard from "@/components/InterviewPreviewCard";
 import FAQAccordion from "@/components/FAQAccordion";
 import {
@@ -10,6 +11,7 @@ import {
   PAID_SUB_TEXT,
   freeLimitButtonText,
   freeLimitExceededMessage,
+  normalizeEmail,
 } from "@/lib/policy";
 
 const INTERVIEW_BENEFIT_TEXT = `STAR 기반 심화 질문 ${PAID_GENERATIONS}회 생성 포함`;
@@ -19,13 +21,29 @@ const customerKey = "GUEST"; // 비회원 결제
 const PRICE = 4900;
 const PRICE_DISPLAY = PRICE.toLocaleString("ko-KR");
 
-function InterviewContent() {
+interface PaidResultInfo {
+  orderId: string;
+  resultUrl: string;
+  expiresAt: string | null;
+  remainingGenerations: number;
+  receiptUrl: string | null;
+  emailSent: boolean;
+}
+
+function InterviewContent({ kakaoChannelUrl }: { kakaoChannelUrl?: string | null }) {
   const [resumeText, setResumeText] = useState("");
   const [jobCategory, setJobCategory] = useState("IT");
+  const [customerEmail, setCustomerEmail] = useState("");
   const [agreedToRefundPolicy, setAgreedToRefundPolicy] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [result, setResult] = useState("");
   const [error, setError] = useState("");
+  const [refundNotice, setRefundNotice] = useState("");
+  const [activeOrder, setActiveOrder] = useState<{
+    orderId: string;
+    remainingGenerations: number;
+  } | null>(null);
+  const [paidResultInfo, setPaidResultInfo] = useState<PaidResultInfo | null>(null);
   const [isWidgetReady, setIsWidgetReady] = useState(false);
 
   // 결제 버튼 처리 상태: 'idle' | 'processing' | 'timeout' | 'error'
@@ -67,6 +85,11 @@ function InterviewContent() {
   };
 
   useEffect(() => {
+    const savedEmail = localStorage.getItem("lastCustomerEmail");
+    if (savedEmail) {
+      setCustomerEmail(savedEmail);
+    }
+
     const urlParams = new URLSearchParams(window.location.search);
     const token = urlParams.get("token");
     const successOrderId = urlParams.get("orderId");
@@ -98,10 +121,14 @@ function InterviewContent() {
     }
 
     if (successOrderId) {
+      setActiveOrder({
+        orderId: successOrderId,
+        remainingGenerations: PAID_GENERATIONS,
+      });
+      urlParams.delete("orderId");
+      window.history.replaceState({}, document.title, window.location.pathname + (urlParams.toString() ? `?${urlParams.toString()}` : ""));
       const savedDraft = localStorage.getItem("interviewResumeDraft");
       if (savedDraft) {
-        urlParams.delete("orderId");
-        window.history.replaceState({}, document.title, window.location.pathname + (urlParams.toString() ? `?${urlParams.toString()}` : ""));
         handleGenerate(successOrderId, savedDraft);
       }
     }
@@ -129,11 +156,22 @@ function InterviewContent() {
       return;
     }
 
+    const cleanEmail = normalizeEmail(customerEmail);
+    if (!cleanEmail) {
+      setPaymentState("idle");
+      setError("결과 재열람 링크 및 영수증 안내를 받을 올바른 이메일 주소를 입력해 주세요.");
+      return;
+    }
+
     try {
       const orderId = "int_" + Math.random().toString(36).substring(2, 11);
+      localStorage.setItem("lastCustomerEmail", cleanEmail);
+      localStorage.setItem(`orderEmail:${orderId}`, cleanEmail);
+
       await paymentWidget.requestPayment({
         orderId,
         orderName: INTERVIEW_BENEFIT_TEXT,
+        customerEmail: cleanEmail,
         successUrl: window.location.origin + "/interview/payments/success",
         failUrl: window.location.origin + "/payments/fail",
       });
@@ -147,12 +185,21 @@ function InterviewContent() {
 
   const handlePaymentClick = async () => {
     setError("");
+    setRefundNotice("");
     setPaymentTimeoutMsg("");
 
     if (!resumeText.trim()) {
       setError("자기소개서 작성 내용을 먼저 입력해 주세요.");
       const el = document.getElementById("interview-textarea");
       if (el) el.focus();
+      return;
+    }
+
+    const cleanEmail = normalizeEmail(customerEmail);
+    if (!cleanEmail) {
+      setError("결과 재열람 링크 및 영수증 안내를 받을 올바른 이메일 주소를 입력해 주세요.");
+      const emailEl = document.getElementById("interview-customer-email");
+      if (emailEl) emailEl.focus();
       return;
     }
 
@@ -208,13 +255,16 @@ function InterviewContent() {
 
     setIsGenerating(true);
     setError("");
+    setRefundNotice("");
     setResult("");
+    setPaidResultInfo(null);
 
     setTimeout(() => {
       document.getElementById("generation-progress-banner")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
     }, 50);
 
     try {
+      const cleanEmail = normalizeEmail(customerEmail);
       const payload: any = {
         jobCategory,
         resumeText: textToUse,
@@ -223,6 +273,9 @@ function InterviewContent() {
 
       if (paidOrderId) {
         payload.orderId = paidOrderId;
+        if (cleanEmail) {
+          payload.email = cleanEmail;
+        }
       }
 
       const res = await fetch("/api/interview/generate", {
@@ -234,17 +287,67 @@ function InterviewContent() {
       });
 
       if (!res.ok) {
+        const errData = await res.json().catch(() => null);
+
+        if (errData?.refunded || errData?.code === "AUTO_REFUNDED") {
+          const msg = errData?.error || "생성 오류로 결제가 자동 전액 환불되었습니다";
+          setRefundNotice(msg);
+          setActiveOrder(null);
+          throw new Error(msg);
+        }
+
+        if (errData?.code === "GENERATION_RETRY_ALLOWED") {
+          if (paidOrderId && typeof errData?.order?.remainingGenerations === "number") {
+            setActiveOrder({
+              orderId: paidOrderId,
+              remainingGenerations: errData.order.remainingGenerations,
+            });
+          }
+          throw new Error(
+            errData?.error ||
+              "일시적인 생성 오류로 실패했습니다. 결제 횟수는 차감되지 않았으니 잠시 후 다시 시도해 주세요."
+          );
+        }
+
         if (res.status === 429) {
           throw new Error(freeLimitExceededMessage("interview"));
         }
-        if (res.status === 403) {
-          throw new Error("결제 정보가 유효하지 않거나 사용 횟수를 모두 소진했습니다.");
+        if (res.status === 409) {
+          throw new Error(errData?.error || "이미 AI 생성이 진행 중입니다. 잠시만 기다려 주세요.");
         }
-        throw new Error("생성 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.");
+        if (res.status === 403) {
+          setActiveOrder(null);
+          throw new Error(
+            errData?.error || "결제 정보가 유효하지 않거나 사용 횟수를 모두 소진했습니다."
+          );
+        }
+        throw new Error(errData?.error || "생성 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.");
       }
 
       const data = await res.json();
       setResult(data.text);
+
+      if (data.order) {
+        if (data.order.remainingGenerations > 0) {
+          setActiveOrder({
+            orderId: data.order.orderId,
+            remainingGenerations: data.order.remainingGenerations,
+          });
+        } else {
+          setActiveOrder(null);
+        }
+
+        if (data.order.resultUrl) {
+          setPaidResultInfo({
+            orderId: data.order.orderId,
+            resultUrl: data.order.resultUrl,
+            expiresAt: data.order.resultExpiresAt ?? null,
+            remainingGenerations: data.order.remainingGenerations,
+            receiptUrl: data.order.receiptUrl ?? null,
+            emailSent: Boolean(data.order.emailSent),
+          });
+        }
+      }
 
       setTimeout(() => {
         document.getElementById("result-section")?.scrollIntoView({ behavior: "smooth" });
@@ -259,19 +362,14 @@ function InterviewContent() {
   return (
     <main className="flex-1 min-h-screen bg-gray-50 py-8 sm:py-12 px-4 sm:px-6 lg:px-8 text-gray-900">
       <div className="max-w-6xl mx-auto flex flex-col gap-10">
-        {/* ========================================================================= */}
         {/* [2단 메인 히어로 섹션] */}
-        {/* ========================================================================= */}
         <section className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-10 items-start">
-          {/* 좌측 영역: 가치제안 / 자소서 입력창 / 직무선택 / 결제 / 신뢰박스 */}
           <div className="flex flex-col gap-6">
-            {/* 상단 알약 배지 */}
             <div className="inline-flex items-center gap-1.5 self-start px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-xs font-bold text-emerald-700">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
               실전 면접관 압박 시뮬레이션
             </div>
 
-            {/* 메인 헤드라인 & 서브카피 */}
             <div>
               <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-gray-900 tracking-tight leading-tight">
                 AI 면접 꼬리질문 시뮬레이터
@@ -281,7 +379,6 @@ function InterviewContent() {
               </p>
             </div>
 
-            {/* 자소서 본문 입력 섹션 (단독 진입로 확보) */}
             <div className="bg-white p-5 sm:p-6 rounded-2xl shadow-sm border border-gray-200 flex flex-col gap-3">
               <div className="flex items-center justify-between">
                 <label htmlFor="interview-textarea" className="block text-sm font-bold text-gray-900">
@@ -306,7 +403,6 @@ function InterviewContent() {
                 className="w-full p-3.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-sm text-gray-800 leading-relaxed resize-y min-h-[140px]"
               />
 
-              {/* 지원 직무 선택 드롭다운 */}
               <div className="pt-2 border-t border-gray-100 flex flex-col gap-1.5">
                 <label htmlFor="job-category-select" className="text-xs font-bold text-gray-700">
                   면접관 전문 분야 (직무 선택)
@@ -325,17 +421,25 @@ function InterviewContent() {
               </div>
             </div>
 
-            {/* 결제 컴포넌트 (공통 컴포넌트 탑재) */}
             <PaymentSection
               priceDisplay={PRICE_DISPLAY}
               title={`결제 및 생성 (${PRICE_DISPLAY}원)`}
               subTitle="토스페이먼츠 보안 모듈을 통해 안전하게 결제됩니다."
               badgeText="단건 결제"
+              customerEmail={customerEmail}
+              onCustomerEmailChange={(v) => {
+                setCustomerEmail(v);
+                if (error) setError("");
+              }}
+              emailInputId="interview-customer-email"
               agreedToRefundPolicy={agreedToRefundPolicy}
               onAgreedChange={setAgreedToRefundPolicy}
               refundCheckboxId="interview-refund-agree"
               guaranteeBenefitText={INTERVIEW_BENEFIT_TEXT}
               error={error}
+              refundNotice={refundNotice}
+              activeOrder={activeOrder}
+              onUseActiveOrder={() => activeOrder && handleGenerate(activeOrder.orderId)}
               paymentState={paymentState}
               paymentTimeoutMsg={paymentTimeoutMsg}
               onRetryPayment={handleRetryPayment}
@@ -350,9 +454,9 @@ function InterviewContent() {
               generatingBannerText="AI가 자소서를 바탕으로 실전 압박 질문을 작성 중입니다 (보통 15~20초 소요)"
               widgetContainerId="interview-payment-widget"
               agreementContainerId="interview-agreement"
+              kakaoChannelUrl={kakaoChannelUrl}
             />
 
-            {/* 신뢰 뱃지 3종 */}
             <div className="flex gap-2 sm:gap-3">
               <div className="flex-1 flex flex-col items-center justify-center gap-1 py-2.5 px-2 bg-white rounded-xl border border-gray-100 shadow-xs text-center">
                 <svg className="w-4 h-4 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -378,45 +482,65 @@ function InterviewContent() {
             </div>
           </div>
 
-          {/* 우측 영역: 3단계 압박 꼬리질문 프리뷰 카드 */}
           <div className="w-full">
             <InterviewPreviewCard />
           </div>
         </section>
 
-        {/* ========================================================================= */}
         {/* [생성된 면접 질문 결과 섹션] */}
-        {/* ========================================================================= */}
         {result && (
           <section id="result-section" className="scroll-mt-20 bg-white p-6 sm:p-8 rounded-2xl shadow-sm border border-gray-200 animate-fadeIn">
-            <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-100">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-4 pb-3 border-b border-gray-100">
               <h2 className="text-lg sm:text-xl font-bold text-gray-900 flex items-center gap-2">
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
                 생성된 면접 꼬리질문 리포트
               </h2>
-              <span className="text-xs font-semibold px-2.5 py-1 bg-emerald-50 text-emerald-700 rounded-lg">
-                STAR 심층 검증 완료
-              </span>
+              <div className="flex items-center gap-2">
+                {!paidResultInfo && (
+                  <button
+                    type="button"
+                    onClick={() => downloadTextFile("면접질문_리포트.txt", result)}
+                    className="text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 px-3 py-1 rounded-md border border-blue-200 cursor-pointer"
+                  >
+                    .txt 다운로드
+                  </button>
+                )}
+                <span className="text-xs font-semibold px-2.5 py-1 bg-emerald-50 text-emerald-700 rounded-lg">
+                  STAR 심층 검증 완료
+                </span>
+              </div>
             </div>
-            <div className="whitespace-pre-wrap bg-gray-50 p-5 sm:p-6 rounded-xl border border-gray-100 text-sm sm:text-base text-gray-800 leading-relaxed font-normal">
+
+            {paidResultInfo && (
+              <PaidResultShareCard
+                orderId={paidResultInfo.orderId}
+                serviceType="interview"
+                resultText={result}
+                resultUrl={paidResultInfo.resultUrl}
+                expiresAt={paidResultInfo.expiresAt}
+                receiptUrl={paidResultInfo.receiptUrl}
+                remainingGenerations={paidResultInfo.remainingGenerations}
+                emailSent={paidResultInfo.emailSent}
+                kakaoChannelUrl={kakaoChannelUrl}
+              />
+            )}
+
+            <div className="whitespace-pre-wrap bg-gray-50 p-5 sm:p-6 rounded-xl border border-gray-100 text-sm sm:text-base text-gray-800 leading-relaxed font-normal select-text">
               {result}
             </div>
           </section>
         )}
 
-        {/* ========================================================================= */}
-        {/* [FAQ 아코디언] */}
-        {/* ========================================================================= */}
         <FAQAccordion />
       </div>
     </main>
   );
 }
 
-export default function InterviewPage() {
+export default function InterviewPage({ kakaoChannelUrl }: { kakaoChannelUrl?: string | null }) {
   return (
     <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-sm text-gray-500">로딩 중...</div>}>
-      <InterviewContent />
+      <InterviewContent kakaoChannelUrl={kakaoChannelUrl} />
     </Suspense>
   );
 }

@@ -20,6 +20,10 @@ export const PAID_GENERATIONS = 3;
 /** 유료 이용권 식별 키(order:*) Redis 보관 기간 (1년 = 31,536,000초) */
 export const PAID_ORDER_TTL_SECONDS = 31_536_000;
 
+/** 유료 생성 결과 재열람 링크 Redis 보관 기간 (7일 = 604,800초) */
+export const RESULT_TTL_DAYS = 7;
+export const RESULT_TTL_SECONDS = RESULT_TTL_DAYS * 24 * 60 * 60;
+
 export type FreeLimitKind = keyof typeof FREE_LIMITS;
 
 export function freeLimitButtonText(kind: FreeLimitKind): string {
@@ -32,3 +36,14 @@ export function freeLimitExceededMessage(kind: FreeLimitKind): string {
 
 export const PAID_BENEFIT_TEXT = `STAR 기반 ${PAID_GENERATIONS}회 생성/재생성 포함`;
 export const PAID_SUB_TEXT = `${PAID_GENERATIONS}회 포함`;
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+export function normalizeEmail(input: unknown): string | null {
+  if (typeof input !== "string") return null;
+  const trimmed = input.trim().toLowerCase();
+  if (!trimmed || trimmed.length > 254 || !EMAIL_REGEX.test(trimmed)) {
+    return null;
+  }
+  return trimmed;
+}

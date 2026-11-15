@@ -7,13 +7,16 @@ import {
 export type ThinkingLevel = "minimal" | "low" | "medium" | "high";
 
 /**
- * 서비스 전역 Gemini 모델 및 추론 강도 공통 설정
- * 자소서 생성 API(/api/generate)와 면접 꼬리질문 API(/api/interview/generate)가 동일 사양을 참조
+ * 서비스 전역 Gemini 모델 및 추론 강도 · 시간 예산 공통 설정
+ * - Vercel maxDuration = 60초 초과(504) 방지를 위해 개별 호출 22초,
+ *   초기 1회 + 폴백 모델 1회 총 45초 시간 예산을 엄격히 적용합니다.
  */
 export const GEMINI_CONFIG = {
   PRIMARY_MODEL: "gemini-3.8-flash",
   FALLBACK_MODEL: "gemini-3.7-flash",
   THINKING_LEVEL: "medium" as ThinkingLevel,
+  PER_ATTEMPT_TIMEOUT_MS: 22_000,
+  TOTAL_BUDGET_MS: 45_000,
 } as const;
 
 interface ThinkingGenerationConfig extends GenerationConfig {
@@ -30,6 +33,8 @@ export interface GenerateResult {
   text: string;
   usedModel: string;
   thinkingLevel: ThinkingLevel;
+  attempts: number;
+  durationMs: number;
   usage: {
     promptTokens: number;
     completionTokens: number;
@@ -38,9 +43,13 @@ export interface GenerateResult {
   };
 }
 
+export interface GenerateOptions {
+  perAttemptTimeoutMs?: number;
+  totalBudgetMs?: number;
+}
+
 /**
  * 404, 403, 모델 미승인/미존재 에러 감지 헬퍼
- * (타임아웃 및 429 할당량 초과는 폴백 대상에서 엄격히 제외)
  */
 export function isModelNotAvailableError(err: any): boolean {
   const status = err?.status;
@@ -56,48 +65,132 @@ export function isModelNotAvailableError(err: any): boolean {
   );
 }
 
+class GeminiTimeoutError extends Error {
+  readonly code = "GEMINI_TIMEOUT";
+  constructor(message: string) {
+    super(message);
+    this.name = "GeminiTimeoutError";
+  }
+}
+
+async function generateWithTimeout(
+  genAI: GoogleGenerativeAI,
+  modelName: string,
+  generationConfig: ThinkingGenerationConfig,
+  prompt: string,
+  timeoutMs: number
+) {
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  const model = genAI.getGenerativeModel({
+    model: modelName,
+    generationConfig,
+  });
+
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      reject(
+        new GeminiTimeoutError(
+          `Gemini request timed out after ${timeoutMs}ms (model=${modelName})`
+        )
+      );
+    }, timeoutMs);
+  });
+
+  try {
+    return await Promise.race([
+      model.generateContent(prompt, {
+        timeout: timeoutMs,
+        signal: controller.signal,
+      }),
+      timeoutPromise,
+    ]);
+  } finally {
+    if (timer) {
+      clearTimeout(timer);
+    }
+  }
+}
+
 /**
- * 최신 Flash 모델 호출 및 투명한 폴백 실행
- * 1) [MODEL_FALLBACK] 콘솔 경고 명시적 출력
- * 2) 실제 호출 성공한 modelId 반환
- * 3) 오직 모델 미승인/미존재(404, 403) 오류 시에만 하위 모델로 전환 (gemini-3.8-flash -> gemini-3.7-flash 2개 모델 한정)
+ * 최신 Flash 모델 호출 + 시간 예산(개별 22초 / 총 45초) 방어 + 폴백 모델 1회 자동 재시도
+ * 1) 초기 모델(PRIMARY_MODEL) 호출 (최대 22초)
+ * 2) 실패·타임아웃 시 남은 45초 시간 예산 내에서 FALLBACK_MODEL(gemini-3.7-flash)로 1회 자동 재시도
+ * 3) 재시도까지 실패하거나 시간 예산 소진 시 에러 throw → 상위 라우트에서 자동 환불(usedCount===0) 또는 미차감 재시도 안내 처리
  */
 export async function generateContentWithFallback(
   genAI: GoogleGenerativeAI,
   prompt: string,
   preferredModel: string = GEMINI_CONFIG.PRIMARY_MODEL,
-  thinkingLevel: ThinkingLevel = GEMINI_CONFIG.THINKING_LEVEL
+  thinkingLevel: ThinkingLevel = GEMINI_CONFIG.THINKING_LEVEL,
+  options?: GenerateOptions
 ): Promise<GenerateResult> {
-  const candidateModels = [
-    preferredModel,
-    GEMINI_CONFIG.FALLBACK_MODEL,
-  ];
+  const perAttemptTimeoutMs = Math.min(
+    options?.perAttemptTimeoutMs ?? GEMINI_CONFIG.PER_ATTEMPT_TIMEOUT_MS,
+    GEMINI_CONFIG.PER_ATTEMPT_TIMEOUT_MS
+  );
+  const totalBudgetMs = Math.min(
+    options?.totalBudgetMs ?? GEMINI_CONFIG.TOTAL_BUDGET_MS,
+    GEMINI_CONFIG.TOTAL_BUDGET_MS
+  );
 
-  // 중복 제거
-  const modelsToTry = Array.from(new Set(candidateModels));
+  const modelsToTry = Array.from(
+    new Set([preferredModel, GEMINI_CONFIG.FALLBACK_MODEL])
+  );
+
   const generationConfig: ThinkingGenerationConfig = {
     thinkingConfig: {
       thinkingLevel,
     },
   };
 
+  const startedAt = Date.now();
   let lastError: any = null;
+  let attempts = 0;
 
   for (let i = 0; i < modelsToTry.length; i++) {
+    const elapsedMs = Date.now() - startedAt;
+    const remainingBudgetMs = totalBudgetMs - elapsedMs;
+
+    if (remainingBudgetMs <= 500) {
+      lastError =
+        lastError ||
+        new GeminiTimeoutError(
+          `Gemini total budget (${totalBudgetMs}ms) exhausted before attempt ${i + 1}`
+        );
+      break;
+    }
+
+    const attemptTimeoutMs = Math.max(
+      1,
+      Math.min(perAttemptTimeoutMs, remainingBudgetMs)
+    );
     const currentModelName = modelsToTry[i];
+    attempts = i + 1;
+
     try {
-      const model = genAI.getGenerativeModel({
-        model: currentModelName,
+      const result = await generateWithTimeout(
+        genAI,
+        currentModelName,
         generationConfig,
-      });
-      const result = await model.generateContent(prompt);
+        prompt,
+        attemptTimeoutMs
+      );
       const text = result.response.text();
+      if (!text || !text.trim()) {
+        throw new Error(`Empty response returned from Gemini (model=${currentModelName})`);
+      }
+
       const usage = result.response.usageMetadata as ExtendedUsageMetadata | undefined;
 
       return {
         text,
         usedModel: currentModelName,
         thinkingLevel,
+        attempts,
+        durationMs: Date.now() - startedAt,
         usage: {
           promptTokens: usage?.promptTokenCount ?? 0,
           completionTokens: usage?.candidatesTokenCount ?? 0,
@@ -107,20 +200,25 @@ export async function generateContentWithFallback(
       };
     } catch (err: any) {
       lastError = err;
+      const postElapsedMs = Date.now() - startedAt;
+      const postRemainingMs = totalBudgetMs - postElapsedMs;
 
-      // 오직 모델 미존재/미지원(404, 403) 시에만 다음 하위 모델로 폴백
-      if (isModelNotAvailableError(err) && i < modelsToTry.length - 1) {
+      if (i < modelsToTry.length - 1 && postRemainingMs > 500) {
         const nextModel = modelsToTry[i + 1];
+        const reasonTag = isModelNotAvailableError(err)
+          ? "model-unavailable"
+          : err?.code === "GEMINI_TIMEOUT"
+            ? "timeout"
+            : "runtime-error";
         console.warn(
-          `[MODEL_FALLBACK] Model '${currentModelName}' failed with model-availability error (${err.status || err.message}). Automatically switching to next candidate '${nextModel}'...`
+          `[MODEL_FALLBACK] Attempt ${attempts} ('${currentModelName}') failed (${reasonTag}: ${err?.status || err?.message}). Retrying once with '${nextModel}' (remainingBudgetMs=${postRemainingMs})...`
         );
         continue;
       }
 
-      // 429 할당량 초과, 타임아웃, 네트워크 오류 등은 폴백하지 않고 즉시 throw
       throw err;
     }
   }
 
-  throw lastError || new Error("Failed to generate content with available models.");
+  throw lastError || new Error("Failed to generate content within time budget.");
 }

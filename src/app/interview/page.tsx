@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import InterviewClient from "./InterviewClient";
+import { BUSINESS_INFO } from "@/lib/siteConfig";
 
 export const metadata: Metadata = {
   alternates: {
@@ -8,5 +9,5 @@ export const metadata: Metadata = {
 };
 
 export default function InterviewPage() {
-  return <InterviewClient />;
+  return <InterviewClient kakaoChannelUrl={BUSINESS_INFO.kakaoChannelUrl} />;
 }

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { loadPaymentWidget, PaymentWidgetInstance } from "@tosspayments/payment-widget-sdk";
 import PreviewCard from "@/components/PreviewCard";
 import PaymentSection from "@/components/PaymentSection";
+import PaidResultShareCard, { downloadTextFile } from "@/components/PaidResultShareCard";
 import FAQAccordion from "@/components/FAQAccordion";
 import {
   FREE_LIMITS,
@@ -13,6 +14,7 @@ import {
   PAID_SUB_TEXT,
   freeLimitButtonText,
   freeLimitExceededMessage,
+  normalizeEmail,
 } from "@/lib/policy";
 
 const clientKey = process.env.NEXT_PUBLIC_TOSS_CLIENT_KEY || "test_gck_EXAMPLETEST";
@@ -22,16 +24,32 @@ const customerKey = "GUEST"; // 비회원 결제
 const PRICE = 4900;
 const PRICE_DISPLAY = PRICE.toLocaleString("ko-KR"); // "4,900"
 
-export default function Home() {
+interface PaidResultInfo {
+  orderId: string;
+  resultUrl: string;
+  expiresAt: string | null;
+  remainingGenerations: number;
+  receiptUrl: string | null;
+  emailSent: boolean;
+}
+
+export default function Home({ kakaoChannelUrl }: { kakaoChannelUrl?: string | null }) {
   const [resumePrompt, setResumePrompt] = useState("");
   const [selectedJobTitle, setSelectedJobTitle] = useState("");
+  const [customerEmail, setCustomerEmail] = useState("");
   const [agreedToRefundPolicy, setAgreedToRefundPolicy] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [result, setResult] = useState("");
   const [error, setError] = useState("");
+  const [refundNotice, setRefundNotice] = useState("");
+  const [activeOrder, setActiveOrder] = useState<{
+    orderId: string;
+    remainingGenerations: number;
+  } | null>(null);
+  const [paidResultInfo, setPaidResultInfo] = useState<PaidResultInfo | null>(null);
   const [isWidgetReady, setIsWidgetReady] = useState(false);
   const [isRedirecting, setIsRedirecting] = useState(false);
-  
+
   // 결제 버튼 처리 상태: 'idle' | 'processing' | 'timeout' | 'error'
   const [paymentState, setPaymentState] = useState<"idle" | "processing" | "timeout" | "error">("idle");
   const [paymentTimeoutMsg, setPaymentTimeoutMsg] = useState("");
@@ -41,7 +59,6 @@ export default function Home() {
   const timeoutTimerRef = useRef<NodeJS.Timeout | null>(null);
   const isWidgetReadyRef = useRef(false);
 
-  // 동기화 ref
   useEffect(() => {
     isWidgetReadyRef.current = isWidgetReady;
   }, [isWidgetReady]);
@@ -52,7 +69,7 @@ export default function Home() {
       setPaymentTimeoutMsg("");
       const paymentWidget = await loadPaymentWidget(clientKey, customerKey);
       paymentWidgetRef.current = paymentWidget;
-      
+
       const paymentMethodsWidget = paymentWidget.renderPaymentMethods(
         "#payment-widget",
         { value: PRICE },
@@ -77,6 +94,11 @@ export default function Home() {
       setResumePrompt(savedDraft);
     }
 
+    const savedEmail = localStorage.getItem("lastCustomerEmail");
+    if (savedEmail) {
+      setCustomerEmail(savedEmail);
+    }
+
     // 채용공고 등에서 공고명(jobTitle) 파라미터가 전달된 경우 타겟팅 배지 활성화 (textarea 본문은 오염시키지 않음)
     const urlParams = new URLSearchParams(window.location.search);
     const jobTitleParam = urlParams.get("jobTitle") || urlParams.get("job");
@@ -90,9 +112,15 @@ export default function Home() {
 
     // 자동 생성 체크 (결제 성공 후 리다이렉트 시)
     const successOrderId = urlParams.get("orderId");
-    if (successOrderId && savedDraft) {
+    if (successOrderId) {
+      setActiveOrder({
+        orderId: successOrderId,
+        remainingGenerations: PAID_GENERATIONS,
+      });
       window.history.replaceState({}, document.title, "/");
-      handleGenerate(successOrderId, savedDraft);
+      if (savedDraft) {
+        handleGenerate(successOrderId, savedDraft);
+      }
     }
 
     initPaymentWidget();
@@ -128,17 +156,27 @@ export default function Home() {
       return;
     }
 
+    const cleanEmail = normalizeEmail(customerEmail);
+    if (!cleanEmail) {
+      setPaymentState("idle");
+      setError("결과 재열람 링크 및 영수증 안내를 받을 올바른 이메일 주소를 입력해 주세요.");
+      return;
+    }
+
     try {
       const orderId = "order_" + Math.random().toString(36).substring(2, 11);
+      localStorage.setItem("lastCustomerEmail", cleanEmail);
+      localStorage.setItem(`orderEmail:${orderId}`, cleanEmail);
+
       await paymentWidget.requestPayment({
         orderId,
         orderName: `자기소개서 AI 생성 (${PAID_GENERATIONS}회권)`,
+        customerEmail: cleanEmail,
         successUrl: window.location.origin + "/payments/success",
         failUrl: window.location.origin + "/payments/fail",
       });
     } catch (err: any) {
       setPaymentState("idle");
-      // 사용자 창 닫기 등 취소는 일반 에러 표시
       if (err.code !== "USER_CANCEL") {
         setError(err.message || "결제 요청 중 오류가 발생했습니다.");
       }
@@ -148,12 +186,20 @@ export default function Home() {
   // 결제 버튼 클릭 핸들러 (10초 타임아웃 및 무한 스피너 방지 Fail-Safe 탑재)
   const handlePaymentClick = async () => {
     setError("");
+    setRefundNotice("");
     setPaymentTimeoutMsg("");
 
-    // 1. 사전 유효성 검증
     if (!resumePrompt.trim()) {
       setError("자기소개서 작성 내용을 먼저 입력해 주세요.");
       scrollToForm();
+      return;
+    }
+
+    const cleanEmail = normalizeEmail(customerEmail);
+    if (!cleanEmail) {
+      setError("결과 재열람 링크 및 영수증 안내를 받을 올바른 이메일 주소를 입력해 주세요.");
+      const emailEl = document.getElementById("resume-customer-email");
+      if (emailEl) emailEl.focus();
       return;
     }
 
@@ -164,23 +210,18 @@ export default function Home() {
       return;
     }
 
-    // 2. 이미 SDK 위젯이 준비된 경우 -> 즉시 결제 실행
     if (isWidgetReady && paymentWidgetRef.current) {
       setPaymentState("idle");
       await executePaymentRequest();
       return;
     }
 
-    // 3. 위젯이 아직 준비되지 않은 경우 -> 스피너 가동 및 10초 타임아웃 안전장치 시작
     setPaymentState("processing");
 
-    // 이전 타이머 정리
     if (timeoutTimerRef.current) {
       clearTimeout(timeoutTimerRef.current);
     }
 
-    // 폴링 인터벌로 준비 완료 감지 (최대 10초)
-    const startTime = Date.now();
     const checkInterval = setInterval(() => {
       if (isWidgetReadyRef.current && paymentWidgetRef.current) {
         clearInterval(checkInterval);
@@ -190,10 +231,8 @@ export default function Home() {
       }
     }, 200);
 
-    // 10초 타임아웃 타이머
     timeoutTimerRef.current = setTimeout(() => {
       clearInterval(checkInterval);
-      // 아직도 준비되지 않은 경우 스피너 중단 & 타임아웃 상태 전환
       if (!isWidgetReadyRef.current) {
         setPaymentState("timeout");
         setPaymentTimeoutMsg(
@@ -220,21 +259,27 @@ export default function Home() {
 
     setIsGenerating(true);
     setError("");
+    setRefundNotice("");
     setResult("");
+    setPaidResultInfo(null);
 
     setTimeout(() => {
       document.getElementById("generation-progress-banner")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
     }, 50);
 
     try {
-      const payload: any = { 
+      const cleanEmail = normalizeEmail(customerEmail);
+      const payload: any = {
         jobTitle: selectedJobTitle.trim() ? selectedJobTitle.trim() : "일반 직무",
         memo: textToUse,
         isFree: !paidOrderId,
       };
-      
+
       if (paidOrderId) {
         payload.orderId = paidOrderId;
+        if (cleanEmail) {
+          payload.email = cleanEmail;
+        }
       }
 
       const res = await fetch("/api/generate", {
@@ -246,18 +291,68 @@ export default function Home() {
       });
 
       if (!res.ok) {
+        const errData = await res.json().catch(() => null);
+
+        if (errData?.refunded || errData?.code === "AUTO_REFUNDED") {
+          const msg = errData?.error || "생성 오류로 결제가 자동 전액 환불되었습니다";
+          setRefundNotice(msg);
+          setActiveOrder(null);
+          throw new Error(msg);
+        }
+
+        if (errData?.code === "GENERATION_RETRY_ALLOWED") {
+          if (paidOrderId && typeof errData?.order?.remainingGenerations === "number") {
+            setActiveOrder({
+              orderId: paidOrderId,
+              remainingGenerations: errData.order.remainingGenerations,
+            });
+          }
+          throw new Error(
+            errData?.error ||
+              "일시적인 생성 오류로 실패했습니다. 결제 횟수는 차감되지 않았으니 잠시 후 다시 시도해 주세요."
+          );
+        }
+
         if (res.status === 429) {
           throw new Error(freeLimitExceededMessage("resume"));
         }
-        if (res.status === 403) {
-          throw new Error("결제 정보가 유효하지 않거나 사용 횟수를 모두 소진했습니다.");
+        if (res.status === 409) {
+          throw new Error(errData?.error || "이미 AI 생성이 진행 중입니다. 잠시만 기다려 주세요.");
         }
-        throw new Error("생성 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.");
+        if (res.status === 403) {
+          setActiveOrder(null);
+          throw new Error(
+            errData?.error || "결제 정보가 유효하지 않거나 사용 횟수를 모두 소진했습니다."
+          );
+        }
+        throw new Error(errData?.error || "생성 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.");
       }
 
       const data = await res.json();
       setResult(data.text);
-      // 결과 영역으로 부드럽게 스크롤
+
+      if (data.order) {
+        if (data.order.remainingGenerations > 0) {
+          setActiveOrder({
+            orderId: data.order.orderId,
+            remainingGenerations: data.order.remainingGenerations,
+          });
+        } else {
+          setActiveOrder(null);
+        }
+
+        if (data.order.resultUrl) {
+          setPaidResultInfo({
+            orderId: data.order.orderId,
+            resultUrl: data.order.resultUrl,
+            expiresAt: data.order.resultExpiresAt ?? null,
+            remainingGenerations: data.order.remainingGenerations,
+            receiptUrl: data.order.receiptUrl ?? null,
+            emailSent: Boolean(data.order.emailSent),
+          });
+        }
+      }
+
       setTimeout(() => {
         document.getElementById("result-section")?.scrollIntoView({ behavior: "smooth" });
       }, 100);
@@ -275,7 +370,7 @@ export default function Home() {
       const res = await fetch("/api/interview/draft", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ resumeText: result })
+        body: JSON.stringify({ resumeText: result }),
       });
       if (res.ok) {
         const data = await res.json();
@@ -294,33 +389,25 @@ export default function Home() {
   return (
     <main className="flex-1 bg-gray-50 text-gray-900">
       <div className="max-w-6xl w-full mx-auto px-3.5 sm:px-6 lg:px-8 py-6 sm:py-12 flex flex-col gap-8 sm:gap-10">
-        
-        {/* ========================================================================= */}
+
         {/* [과업 1: 메인 2단 전환 최적화 히어로 영역] */}
-        {/* 데스크톱 md 이상: 2단 그리드 (좌: 가치제안/가격/CTA/신뢰, 우: Before/After) */}
-        {/* 모바일: 1단 스택 (flex-col) 및 break-keep */}
-        {/* ========================================================================= */}
         <section className="grid grid-cols-1 md:grid-cols-2 gap-8 lg:gap-12 items-start">
-          {/* 좌측 영역: 가치 제안 및 구매 전환 */}
+          {/* 좌측 영역 */}
           <div className="flex flex-col text-left break-keep">
-            {/* 상단 알약 배지 */}
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-bold border border-emerald-200 self-start mb-4">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
               <span>공공기관 채용공고 실시간 연동</span>
             </div>
 
-            {/* 헤드라인 */}
             <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-gray-900 tracking-tight leading-[1.2] mb-3">
               막막한 한 줄을<br />
               <span className="text-blue-600">완성도 높은 자소서 초안</span>으로
             </h1>
 
-            {/* 서브카피 */}
             <p className="text-base sm:text-lg text-gray-600 mb-6 leading-relaxed">
               메모만 적어주세요. STAR 기법으로 3분 안에 완성됩니다.
             </p>
 
-            {/* 가격 앵커링 박스 */}
             <div className="bg-white border border-blue-100 rounded-2xl p-5 shadow-sm mb-6 flex flex-col gap-2.5">
               <div className="flex flex-wrap items-baseline gap-2.5">
                 <span className="text-sm sm:text-base text-gray-400 line-through">
@@ -341,7 +428,6 @@ export default function Home() {
               </div>
             </div>
 
-            {/* 메인 CTA 버튼 (상시 활성화 파란색) */}
             <div className="flex flex-col gap-2.5">
               <button
                 onClick={scrollToForm}
@@ -353,7 +439,6 @@ export default function Home() {
                 </svg>
               </button>
 
-              {/* 서브 액션 텍스트 링크 */}
               <button
                 onClick={scrollToForm}
                 className="text-xs sm:text-sm text-gray-500 hover:text-blue-600 underline font-medium text-center py-1 transition-colors cursor-pointer"
@@ -362,7 +447,6 @@ export default function Home() {
               </button>
             </div>
 
-            {/* 신뢰 뱃지 3종 (결제 근처 승격) */}
             <div className="mt-6 sm:mt-8 pt-6 border-t border-gray-200/80 flex flex-row gap-2 text-center w-full">
               <div className="flex-1 flex flex-col items-center justify-center gap-1 py-2 px-1 bg-white rounded-xl border border-gray-100 shadow-xs">
                 <svg className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -390,15 +474,12 @@ export default function Home() {
             </div>
           </div>
 
-          {/* 우측 영역: Before / After 증거 시각화 */}
           <div className="w-full">
             <PreviewCard />
           </div>
         </section>
 
-        {/* ========================================================================= */}
         {/* [자소서 입력 폼 섹션] */}
-        {/* ========================================================================= */}
         <section id="resume-form" className="scroll-mt-20 bg-white p-6 sm:p-8 rounded-2xl shadow-sm border border-gray-200">
           <div className="flex items-center justify-between mb-3">
             <label htmlFor="resume-textarea" className="block text-base font-bold text-gray-900">
@@ -414,7 +495,6 @@ export default function Home() {
             <span className="text-red-600 font-semibold">주민번호·연락처 등 민감정보는 입력하지 마세요.</span>
           </p>
 
-          {/* 선택된 공고 타겟팅 배지 (URL 파라미터 유입 시 노출, textarea 오염 방지) */}
           {selectedJobTitle && (
             <div className="mb-3.5 flex items-center justify-between gap-2 p-2.5 sm:px-3.5 sm:py-2 bg-sky-50 border border-sky-200 rounded-xl text-xs text-sky-900">
               <div className="flex items-center gap-2 min-w-0">
@@ -447,16 +527,23 @@ export default function Home() {
           ></textarea>
         </section>
 
-        {/* ========================================================================= */}
         {/* [결제 및 생성 섹션 (공통 컴포넌트)] */}
-        {/* ========================================================================= */}
         <PaymentSection
           priceDisplay={PRICE_DISPLAY}
+          customerEmail={customerEmail}
+          onCustomerEmailChange={(v) => {
+            setCustomerEmail(v);
+            if (error) setError("");
+          }}
+          emailInputId="resume-customer-email"
           agreedToRefundPolicy={agreedToRefundPolicy}
           onAgreedChange={setAgreedToRefundPolicy}
           refundCheckboxId="refund-agree"
           guaranteeBenefitText={PAID_BENEFIT_TEXT}
           error={error}
+          refundNotice={refundNotice}
+          activeOrder={activeOrder}
+          onUseActiveOrder={() => activeOrder && handleGenerate(activeOrder.orderId)}
           paymentState={paymentState}
           paymentTimeoutMsg={paymentTimeoutMsg}
           onRetryPayment={handleRetryPayment}
@@ -467,23 +554,47 @@ export default function Home() {
           onFreeGenerate={() => handleGenerate()}
           freeButtonText={freeLimitButtonText("resume")}
           generatingText="AI 자소서 생성 중..."
+          kakaoChannelUrl={kakaoChannelUrl}
         />
 
-        {/* ========================================================================= */}
         {/* [생성된 자소서 결과 섹션] */}
-        {/* ========================================================================= */}
         {result && (
           <section id="result-section" className="scroll-mt-20 bg-white p-6 sm:p-8 rounded-2xl shadow-sm border border-gray-200 animate-fadeIn">
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
               <h2 className="text-lg sm:text-xl font-bold text-gray-900 flex items-center gap-2">
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
                 생성된 자기소개서 초안
               </h2>
-              <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-200">
-                STAR 교정 완료
-              </span>
+              <div className="flex items-center gap-2">
+                {!paidResultInfo && (
+                  <button
+                    type="button"
+                    onClick={() => downloadTextFile("자기소개서_초안.txt", result)}
+                    className="text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 px-3 py-1 rounded-md border border-blue-200 cursor-pointer"
+                  >
+                    .txt 다운로드
+                  </button>
+                )}
+                <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-200">
+                  STAR 교정 완료
+                </span>
+              </div>
             </div>
-            
+
+            {paidResultInfo && (
+              <PaidResultShareCard
+                orderId={paidResultInfo.orderId}
+                serviceType="resume"
+                resultText={result}
+                resultUrl={paidResultInfo.resultUrl}
+                expiresAt={paidResultInfo.expiresAt}
+                receiptUrl={paidResultInfo.receiptUrl}
+                remainingGenerations={paidResultInfo.remainingGenerations}
+                emailSent={paidResultInfo.emailSent}
+                kakaoChannelUrl={kakaoChannelUrl}
+              />
+            )}
+
             <div className="whitespace-pre-wrap bg-gray-50/80 p-5 rounded-xl border border-gray-200 text-sm leading-relaxed mb-6 font-normal text-gray-800 select-text">
               {result}
             </div>
@@ -507,13 +618,10 @@ export default function Home() {
           </section>
         )}
 
-        {/* ========================================================================= */}
         {/* [FAQ 섹션] */}
-        {/* ========================================================================= */}
         <FAQAccordion />
 
       </div>
     </main>
   );
 }
-

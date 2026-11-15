@@ -1,30 +1,13 @@
 import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
-
-function getRedisCredentials(): { url: string; token: string } | null {
-  const url =
-    process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL || "";
-  const token =
-    process.env.UPSTASH_REDIS_REST_TOKEN ||
-    process.env.KV_REST_API_TOKEN ||
-    "";
-
-  if (!url || !token) {
-    return null;
-  }
-
-  return { url, token };
-}
+import { getRedisCredentials, requireRedisCredentials } from "@/lib/redisConfig";
 
 /**
  * 런타임 환경변수를 기반으로 Upstash Redis 클라이언트를 생성합니다.
  * 유료 결제 검증/차감 등 엄격한 상태 일관성이 필요한 경로에서 사용합니다.
  */
 export function requireRedisClient(): Redis {
-  const creds = getRedisCredentials();
-  if (!creds) {
-    throw new Error("Upstash Redis environment variables are missing.");
-  }
+  const creds = requireRedisCredentials();
   return new Redis({
     url: creds.url,
     token: creds.token,
