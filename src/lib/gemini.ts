@@ -8,14 +8,16 @@ export type ThinkingLevel = "minimal" | "low" | "medium" | "high";
 
 /**
  * 서비스 전역 Gemini 모델 및 추론 강도 · 시간 예산 공통 설정
- * - Vercel maxDuration = 60초 초과(504) 방지를 위해 개별 호출 20초,
- *   초기 1회 + 폴백 모델 1회 총 40초 시간 예산을 엄격히 적용합니다. (잔여 20초는 자동 환불 등 안전 여유)
+ * - Vercel Serverless maxDuration = 60초 초과(504) 방지 구조:
+ *   · 단문/일반 호출: 1차 20초 + 폴백 20초 <= 총 40초 (잔여 20초: Redis/환불 여유)
+ *   · 다중 4문항 일괄 생성(draft/final): 1차 30,000ms + 폴백 20,000ms <= 총 50,000ms (잔여 10,000ms: 입출력·Redis·응답 안전 여유)
  */
 export const GEMINI_CONFIG = {
   PRIMARY_MODEL: "gemini-3.8-flash",
   FALLBACK_MODEL: "gemini-3.7-flash",
   THINKING_LEVEL: "medium" as ThinkingLevel,
   PER_ATTEMPT_TIMEOUT_MS: 20_000,
+  FALLBACK_ATTEMPT_TIMEOUT_MS: 20_000,
   TOTAL_BUDGET_MS: 40_000,
 } as const;
 
@@ -45,6 +47,7 @@ export interface GenerateResult {
 
 export interface GenerateOptions {
   perAttemptTimeoutMs?: number;
+  fallbackAttemptTimeoutMs?: number;
   totalBudgetMs?: number;
   responseMimeType?: string;
   responseSchema?: any;
@@ -133,6 +136,9 @@ export async function generateContentWithFallback(
   const perAttemptTimeoutMs = options?.perAttemptTimeoutMs
     ? Math.min(options.perAttemptTimeoutMs, 35_000)
     : GEMINI_CONFIG.PER_ATTEMPT_TIMEOUT_MS;
+  const fallbackAttemptTimeoutMs = options?.fallbackAttemptTimeoutMs
+    ? Math.min(options.fallbackAttemptTimeoutMs, 25_000)
+    : Math.min(perAttemptTimeoutMs, GEMINI_CONFIG.FALLBACK_ATTEMPT_TIMEOUT_MS);
   const totalBudgetMs = options?.totalBudgetMs
     ? Math.min(options.totalBudgetMs, 50_000)
     : GEMINI_CONFIG.TOTAL_BUDGET_MS;
@@ -171,9 +177,11 @@ export async function generateContentWithFallback(
       break;
     }
 
+    const attemptBudgetLimit =
+      i === 0 ? perAttemptTimeoutMs : fallbackAttemptTimeoutMs;
     const attemptTimeoutMs = Math.max(
       1,
-      Math.min(perAttemptTimeoutMs, remainingBudgetMs)
+      Math.min(attemptBudgetLimit, remainingBudgetMs)
     );
     const currentModelName = modelsToTry[i];
     attempts = i + 1;

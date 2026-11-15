@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { GEMINI_CONFIG, generateContentWithFallback } from "@/lib/gemini";
-import { checkFreeRateLimit } from "@/lib/redis";
+import {
+  reserveFreeRateLimit,
+  type FreeRateLimitReservation,
+} from "@/lib/redis";
 import { FREE_LIMITS, FREE_LIMIT_WINDOW } from "@/lib/policy";
 import { executePaidGeneration } from "@/lib/paymentHandlers";
 import { reportServerError } from "@/lib/alerts";
@@ -12,6 +15,7 @@ export const maxDuration = 60;
 export async function POST(req: Request) {
   const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "dummy-api-key");
   let parsedOrderId: string | null = null;
+  let freeReservation: FreeRateLimitReservation | null = null;
 
   try {
     const body = await req.json();
@@ -87,14 +91,17 @@ export async function POST(req: Request) {
 
     // ── Free Tier Rate Limiting & Execution ──
     const ip = (req.headers.get("x-forwarded-for") ?? "127.0.0.1").split(",")[0].trim();
-    const allowed = await checkFreeRateLimit({
+    freeReservation = await reserveFreeRateLimit({
       key: `ratelimit:interview:ip:${ip}`,
       maxRequests: FREE_LIMITS.interview,
       window: FREE_LIMIT_WINDOW,
     });
-    if (!allowed) {
+    if (!freeReservation.allowed) {
       return NextResponse.json(
-        { error: `Too Many Requests. Free tier limit exceeded (${FREE_LIMITS.interview} per 24h).` },
+        {
+          error: `Too Many Requests. Free tier limit exceeded (${FREE_LIMITS.interview} per 24h).`,
+          freeRemaining: 0,
+        },
         { status: 429 }
       );
     }
@@ -108,6 +115,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       success: true,
+      freeRemaining: freeReservation.remaining,
       text: genResult.text,
       usedModel: genResult.usedModel,
       thinkingLevel: genResult.thinkingLevel,
@@ -116,6 +124,9 @@ export async function POST(req: Request) {
       usage: genResult.usage,
     });
   } catch (error: any) {
+    const restoredRemaining = freeReservation?.reserved
+      ? await freeReservation.refund()
+      : undefined;
     console.error("Generate API Error:", error);
     await reportServerError({
       route: "/api/interview/generate",
@@ -125,7 +136,13 @@ export async function POST(req: Request) {
       serviceType: "interview",
     });
     return NextResponse.json(
-      { error: "Internal Server Error" },
+      {
+        error: "Internal Server Error",
+        freeQuotaRestored: Boolean(freeReservation?.reserved),
+        ...(typeof restoredRemaining === "number"
+          ? { freeRemaining: restoredRemaining }
+          : {}),
+      },
       { status: 500 }
     );
   }

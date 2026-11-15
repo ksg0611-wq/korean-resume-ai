@@ -1,4 +1,8 @@
-import { countResumeMetrics, type TextMetrics } from "./textMetrics";
+import {
+  countResumeMetrics,
+  sanitizeUnverifiedNumbers,
+  type TextMetrics,
+} from "./textMetrics";
 import { detectBlindViolations, type BlindCheckResult } from "./blindCheck";
 
 export interface CategoryScore {
@@ -334,12 +338,17 @@ export function buildDiagnosticReport(
     });
   }
 
-  const sampleFix: SampleFix = aiEval.sampleFix || {
+  const rawSampleFix: SampleFix = aiEval.sampleFix || {
     title: "구체적 행동과 정량 성과 보강",
     beforeExcerpt: text.slice(0, 100),
     afterExample:
-      "팀 프로젝트에서 발생한 결제 이탈 문제를 해결하기 위해 캐싱 로직을 도입하여 로딩 시간을 1.2초 단축하고 완료율을 18% 개선했습니다.",
+      "팀 프로젝트에서 발생한 결제 이탈 문제를 해결하기 위해 캐싱 로직을 도입하여 로딩 시간을 [본인 수치 입력] 단축하고 완료율을 [본인 수치 입력] 개선했습니다.",
     tip: "본인의 주도적 행동과 숫자로 입증되는 성과를 연결해 서술하세요.",
+  };
+
+  const sampleFix: SampleFix = {
+    ...rawSampleFix,
+    afterExample: sanitizeUnverifiedNumbers(rawSampleFix.afterExample, text),
   };
 
   // 약점 정렬: 블라인드 위반 최우선, 그 다음 high -> medium 순
@@ -352,7 +361,7 @@ export function buildDiagnosticReport(
 
   const summary =
     totalScore >= 80
-      ? "전반적으로 우수한 구조를 갖추고 있으나 일부 표현과 수치 보강으로 서류 합격률을 더 끌어올릴 수 있습니다."
+      ? "전반적으로 우수한 구조를 갖추고 있으나 일부 표현과 수치 보강으로 서류 경쟁력을 더 끌어올릴 수 있습니다."
       : totalScore >= 60
         ? "기본 경험 소재는 명확하지만 STAR 전개 구체성과 정량적 기여도 보완이 필수적인 상태입니다."
         : "핵심 과제와 본인 역할이 모호하고 분량·형식 조정이 시급하여 전면 재구조화가 필요합니다.";

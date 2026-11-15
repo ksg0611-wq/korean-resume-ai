@@ -1,6 +1,6 @@
 import { GoogleGenerativeAI, SchemaType, type Schema } from "@google/generative-ai";
 import { GEMINI_CONFIG, generateContentWithFallback } from "@/lib/gemini";
-import { countResumeMetrics } from "@/lib/textMetrics";
+import { countResumeMetrics, sanitizeUnverifiedNumbers } from "@/lib/textMetrics";
 import { detectBlindViolations } from "@/lib/blindCheck";
 import type { AIAnchorEvaluation } from "@/lib/diagnoseRubric";
 import { STANDARD_RESUME_QUESTIONS } from "@/lib/policy";
@@ -207,7 +207,7 @@ export async function evaluateDiagnosisWithAI(options: {
 [약점(weaknesses) 및 수정 예시(sampleFix) 규칙]
 - weaknesses는 가장 치명적인 순으로 4~5건을 작성하세요 (severity는 "high" 또는 "medium").
 - 블라인드 위반 여부·단어 위치는 서버 규칙 엔진이 별도로 잠금 처리하므로 weaknesses와 sampleFix에 출신 학교명·가족·출신지 등 블라인드 위반 단어나 위치를 절대 인용하거나 언급하지 마세요. 오직 STAR 구조, 수치·역할 구체성, 직무/문항 적합성, 문장 설득력 약점만 작성하세요.
-- sampleFix는 원문에서 블라인드 정보와 무관한 일반 경험 문장 1~2개를 beforeExcerpt에 그대로 발췌하고, afterExample에서 설득력 있는 합격 문장으로 개선하세요. 단, 원문에 없는 숫자·성과를 지어내지 말고 수치가 빠진 자리는 "[본인 수치 입력]"으로 표기하세요.
+- sampleFix는 원문에서 블라인드 정보와 무관한 일반 경험 문장 1~2개를 beforeExcerpt에 그대로 발췌하고, afterExample에서 설득력 있는 완성도 높은 문장으로 개선하세요. 단, 원문에 없는 %, 원, 만, 억, 건, 명, 배, 시간, Zero 등 성과 수치를 절대 지어내지 말고 수치가 필요한 자리는 반드시 "[본인 수치 입력]"으로만 표기하세요.
 
 [참고 규칙 기반 사전 측정]
 - 공백 포함 글자수: ${detMetrics.charCount}자 (목표 ${targetChars}자)
@@ -315,9 +315,12 @@ ${text.trim()}`;
     sampleFix: {
       title: String(raw.sampleFix?.title || "주도적 행동과 검증 수치 중심 교정 예시"),
       beforeExcerpt: String(raw.sampleFix?.beforeExcerpt || text.trim().slice(0, 110)),
-      afterExample: String(
-        raw.sampleFix?.afterExample ||
-          "프로젝트 일정 지연 원인을 [본인 수치 입력]건의 데이터로 분류해 우선순위를 재조정했고, 유관 부서 협의를 주도해 마감 기한 내 완수했습니다."
+      afterExample: sanitizeUnverifiedNumbers(
+        String(
+          raw.sampleFix?.afterExample ||
+            "프로젝트 일정 지연 원인을 [본인 수치 입력] 기준으로 분류해 우선순위를 재조정했고, 유관 부서 협의를 주도해 마감 기한 내 완수했습니다."
+        ),
+        text
       ),
       tip: String(
         raw.sampleFix?.tip ||
@@ -339,6 +342,7 @@ export async function generateFourQuestionsResume(options: {
   memo: string;
   revisionWeaknesses?: string[];
   perAttemptTimeoutMs?: number;
+  fallbackAttemptTimeoutMs?: number;
   totalBudgetMs?: number;
 }): Promise<{
   items: ResumeQuestionItem[];
@@ -359,7 +363,8 @@ export async function generateFourQuestionsResume(options: {
     memo,
     revisionWeaknesses,
     perAttemptTimeoutMs = 30_000,
-    totalBudgetMs = 45_000,
+    fallbackAttemptTimeoutMs = 20_000,
+    totalBudgetMs = 50_000,
   } = options;
 
   const isRevision = Array.isArray(revisionWeaknesses) && revisionWeaknesses.length > 0;
@@ -369,7 +374,7 @@ export async function generateFourQuestionsResume(options: {
 ${revisionWeaknesses.map((w, idx) => `${idx + 1}. ${w}`).join("\n")}\n`
     : "";
 
-  const prompt = `당신은 국내 공기업(NCS)·대기업·스타트업 서류 전형 합격률 1위 전문 에디터입니다.
+  const prompt = `당신은 국내 공기업(NCS)·대기업·스타트업 서류 평가 기준에 정통한 전문 에디터입니다.
 지원자의 지원 정보와 경험 메모(또는 기존 자소서 초안)를 바탕으로 **표준 4개 문항 전체 완성본**을 JSON 형식으로 작성해 주세요.
 
 [지원 기업/직무]
@@ -385,7 +390,7 @@ ${revisionBlock}
    - id: "q3", order: 3, title: "${STANDARD_RESUME_QUESTIONS[2].title}"
    - id: "q4", order: 4, title: "${STANDARD_RESUME_QUESTIONS[3].title}"
 2. 분량 제한: 각 문항 본문(body)은 **공백 포함 450자~550자 내외**(최소 420자, 최대 580자)로 밀도 있게 작성하세요.
-3. **절대 금지(허위 수치 창작 금지)**: 지원자 입력에 없는 매출, 퍼센트(%), 건수, 인원, 예산, 기간 등 구체적 수치를 절대 임의로 창작(환각)하지 마세요! 수치를 넣으면 설득력이 높아지는 자리에는 반드시 \`[본인 수치 입력]\` 플레이스홀더(예: \`처리 시간을 [본인 수치 입력]% 단축\`)를 삽입해 지원자가 직접 확인·기입하도록 안내하세요.
+3. **절대 금지(허위 수치·성과 창작 및 Zero 표기 금지)**: 지원자 입력 원문에 없는 퍼센트(%), 금액(원/만/억), 건수(건), 인원(명), 배수(배), 소요시간(시간), Zero/0건 등 구체적 수치·성과를 절대 임의로 창작(환각)하지 마세요! 수치를 넣으면 설득력이 높아지는 자리에는 반드시 \`[본인 수치 입력]\` 플레이스홀더(예: \`처리 시간을 [본인 수치 입력] 단축\`)로만 출력해 지원자가 직접 확인·기입하도록 안내하세요.
 4. **블라인드 채용 완벽 준수**: 학교명(OO대 등), 출신 지역, 가족 직업/직위, 성별, 나이, 출생연도를 절대 포함하지 마세요.
 5. 각 문항마다 두괄식 소제목이나 핵심 결론 문장을 첫 문장에 배치하고, STAR(상황-과제-행동-결과)가 자연스럽게 연결되도록 서술하세요.`;
 
@@ -396,6 +401,7 @@ ${revisionBlock}
     GEMINI_CONFIG.THINKING_LEVEL,
     {
       perAttemptTimeoutMs,
+      fallbackAttemptTimeoutMs,
       totalBudgetMs,
       responseMimeType: "application/json",
       responseSchema: DRAFT_RESPONSE_SCHEMA,
@@ -415,10 +421,12 @@ ${revisionBlock}
     const matched =
       rawItems.find((item) => item.id === std.id || item.order === std.order) ||
       rawItems[index];
-    const cleanBody = (matched?.body || "").trim();
-    if (!cleanBody) {
+    const rawBody = (matched?.body || "").trim();
+    if (!rawBody) {
       throw new Error(`Missing body for standard question ${std.id}`);
     }
+    // 입력 원문에 존재하지 않는 성과·정량 수치 후처리 차단 ([본인 수치 입력] 치환)
+    const cleanBody = sanitizeUnverifiedNumbers(rawBody, memo);
     const metrics = countResumeMetrics(cleanBody, std.targetChars);
     return {
       id: std.id,
@@ -474,7 +482,8 @@ ${resumeContext.trim()}
    - question: 지원자 실제 경험 맥락을 겨냥한 날카로운 질문
    - intent: 면접관이 이 질문으로 검증하려는 핵심 평가 기준 (1문장)
    - answerTip: 고득점 답변 구조(두괄식 핵심 + 근거 연결 팁 1문장)
-4. 블라인드 면접 규칙상 출신 학교·가족·신상을 묻는 질문은 절대 생성하지 마세요.`;
+4. 블라인드 면접 규칙상 출신 학교·가족·신상을 묻는 질문은 절대 생성하지 마세요.
+5. 지원자 자소서/메모 원문에 없는 수치(%)·성과 숫자를 임의로 지어내어 질문이나 답변 팁에 포함하지 마세요.`;
 
   const genResult = await generateContentWithFallback(
     genAI,
@@ -566,5 +575,5 @@ export function formatFullPackageText(options: {
           .join("\n\n")
       : "";
 
-  return `${header}========================================\n[합격 자소서 4문항 완성본]\n========================================\n\n${resumeSection}${interviewSection}`.trim();
+  return `${header}========================================\n[AI 자소서 4문항 완성본]\n========================================\n\n${resumeSection}${interviewSection}`.trim();
 }

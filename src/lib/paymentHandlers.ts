@@ -518,7 +518,8 @@ export async function executePaidPackageGeneration(options: {
         memo: effectiveMemo,
         revisionWeaknesses,
         perAttemptTimeoutMs: 30_000,
-        totalBudgetMs: 45_000,
+        fallbackAttemptTimeoutMs: 20_000,
+        totalBudgetMs: 50_000,
       }),
       generateTenInterviewQuestions({
         genAI,

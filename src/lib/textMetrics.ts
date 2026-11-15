@@ -83,3 +83,65 @@ export function countResumeMetrics(text: string, targetChars: number = 700): Tex
     metricCount: metricTokens.length,
   };
 }
+
+/**
+ * 성과·정량 수치 후처리 검사 대상 정규식
+ * - %, %p, 퍼센트, 원, 천/만/억/조(원/명/건/배/시간), 건, 명, 배, 시간, Zero/제로 매칭
+ * - "3가지", "2단계", "1번", "4문항", "5급", "2026년" 등 일반 문장 구조 숫자는 제외
+ * - "실제로", "문제로"처럼 앞뒤에 한글/영문이 붙은 단어 내부 "제로"는 제외
+ */
+const UNVERIFIED_QUANT_REGEX =
+  /(?:\d+(?:,\d+)*(?:\.\d+)?)[ \t]*(?:(?:천|만|억|조)[ \t]*(?:여[ \t]*)?(?:원|명|건|배|시간)?|%p?|퍼센트(?:포인트)?|원|건|명|배|시간)|(?<![A-Za-z0-9가-힣])(?:Zero|ZERO|zero|제로(?:[ \t]*(?:원|건|명|배|시간|%))?)(?![A-Za-z0-9가-힣])/g;
+
+export const UNVERIFIED_METRIC_PLACEHOLDER = "[본인 수치 입력]";
+
+function normalizeQuantKey(rawToken: string): string {
+  return rawToken
+    .toLowerCase()
+    .replace(/,/g, "")
+    .replace(/[ \t]+/g, "")
+    .replace(/퍼센트포인트/g, "%p")
+    .replace(/퍼센트/g, "%")
+    .replace(/^제로/, "zero")
+    .replace(/(천|만|억|조)여/g, "$1");
+}
+
+function extractVerifiedQuantKeys(sourceText: string): Set<string> {
+  const keys = new Set<string>();
+  if (typeof sourceText !== "string" || !sourceText.trim()) {
+    return keys;
+  }
+  const matches = sourceText.match(UNVERIFIED_QUANT_REGEX) || [];
+  for (const m of matches) {
+    keys.add(normalizeQuantKey(m));
+  }
+  return keys;
+}
+
+/**
+ * 사용자 입력 원문에 존재하지 않는 성과·정량 수치를 탐지해 반환
+ */
+export function findUnverifiedMetrics(generatedText: string, sourceText: string): string[] {
+  if (typeof generatedText !== "string" || !generatedText) {
+    return [];
+  }
+  const allowedKeys = extractVerifiedQuantKeys(sourceText);
+  const found = generatedText.match(UNVERIFIED_QUANT_REGEX) || [];
+  return found.filter((token) => !allowedKeys.has(normalizeQuantKey(token)));
+}
+
+/**
+ * 사용자 입력 원문에 존재하지 않는 성과·정량 수치를 [본인 수치 입력]으로 자동 치환
+ */
+export function sanitizeUnverifiedNumbers(generatedText: string, sourceText: string): string {
+  if (typeof generatedText !== "string" || !generatedText) {
+    return "";
+  }
+  const allowedKeys = extractVerifiedQuantKeys(sourceText);
+  return generatedText.replace(UNVERIFIED_QUANT_REGEX, (match) => {
+    if (allowedKeys.has(normalizeQuantKey(match))) {
+      return match;
+    }
+    return UNVERIFIED_METRIC_PLACEHOLDER;
+  });
+}
