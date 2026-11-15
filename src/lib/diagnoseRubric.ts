@@ -334,6 +334,14 @@ export function buildDiagnosticReport(
     tip: "본인의 주도적 행동과 숫자로 입증되는 성과를 연결해 서술하세요.",
   };
 
+  // 약점 정렬: 블라인드 위반 최우선, 그 다음 high -> medium 순
+  weaknesses.sort((a, b) => {
+    if (a.id === "wk-blind") return -1;
+    if (b.id === "wk-blind") return 1;
+    if (a.severity === b.severity) return 0;
+    return a.severity === "high" ? -1 : 1;
+  });
+
   const summary =
     totalScore >= 80
       ? "전반적으로 우수한 구조를 갖추고 있으나 일부 표현과 수치 보강으로 서류 합격률을 더 끌어올릴 수 있습니다."

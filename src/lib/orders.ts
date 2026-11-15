@@ -1,6 +1,7 @@
 import {
   PAID_GENERATIONS,
   PAID_ORDER_TTL_SECONDS,
+  PREVIEW_TTL_SECONDS,
   RESULT_TTL_SECONDS,
   normalizeEmail,
 } from "@/lib/policy";
@@ -10,9 +11,14 @@ import {
   findOrderById,
   generateSecureToken,
   getOrderKey,
+  getOrderPreviewKey,
+  getPreviewKey,
   getResultKey,
   hashResultToken,
+  type InterviewQuestionItem,
   type OrderRecord,
+  type PreviewRecord,
+  type ResumeQuestionItem,
   type ServiceType,
   type StoredResultRecord,
 } from "@/lib/results";
@@ -367,13 +373,31 @@ export async function completePaidGeneration(options: {
   title: string;
   text: string;
   usedModel: string;
+  items?: ResumeQuestionItem[];
+  interviewQuestions?: InterviewQuestionItem[];
+  interviewPending?: boolean;
+  interviewError?: string | null;
+  jobTitle?: string | null;
+  sourceMemo?: string | null;
 }): Promise<{
   order: OrderRecord;
   resultToken: string;
   resultUrl: string;
   resultExpiresAt: string;
 }> {
-  const { orderKey, order, title, text, usedModel } = options;
+  const {
+    orderKey,
+    order,
+    title,
+    text,
+    usedModel,
+    items,
+    interviewQuestions,
+    interviewPending,
+    interviewError,
+    jobTitle,
+    sourceMemo,
+  } = options;
   const redis = requireRedisClient();
   const resultKey = getResultKey(order.orderId);
 
@@ -401,6 +425,12 @@ export async function completePaidGeneration(options: {
     receiptUrl: order.receiptUrl ?? null,
     createdAt: existingResult?.createdAt || nowIso,
     expiresAt: expiresAtIso,
+    ...(items ? { items } : {}),
+    ...(interviewQuestions ? { interviewQuestions } : {}),
+    ...(typeof interviewPending === "boolean" ? { interviewPending } : {}),
+    ...(interviewError !== undefined ? { interviewError } : {}),
+    ...(jobTitle !== undefined ? { jobTitle } : {}),
+    ...(sourceMemo !== undefined ? { sourceMemo } : {}),
   };
 
   await redis.set(resultKey, storedResult, { ex: RESULT_TTL_SECONDS });
@@ -439,6 +469,209 @@ export async function completePaidGeneration(options: {
     resultUrl: buildResultUrl(order.orderId, resultToken),
     resultExpiresAt: expiresAtIso,
   };
+}
+
+const CONSUME_PREVIEW_LUA = `
+local raw = redis.call("GET", KEYS[1])
+if not raw then
+  if KEYS[2] and KEYS[2] ~= "" then
+    redis.call("DEL", KEYS[2])
+  end
+  return nil
+end
+redis.call("DEL", KEYS[1])
+if KEYS[2] and KEYS[2] ~= "" then
+  redis.call("DEL", KEYS[2])
+end
+return raw
+`;
+
+/**
+ * 미결제 전 문항 미리보기 결과를 previewToken으로 Redis에 저장 (TTL 2시간 = 7,200초)
+ */
+export async function savePreviewRecord(options: {
+  jobTitle: string;
+  memo: string;
+  items: ResumeQuestionItem[];
+  usedModel: string;
+  thinkingLevel: string;
+}): Promise<PreviewRecord> {
+  const redis = requireRedisClient();
+  const previewToken = generateSecureToken();
+  const nowDate = new Date();
+  const record: PreviewRecord = {
+    previewToken,
+    jobTitle: options.jobTitle,
+    memo: options.memo,
+    items: options.items,
+    usedModel: options.usedModel,
+    thinkingLevel: options.thinkingLevel,
+    createdAt: nowDate.toISOString(),
+    expiresAt: new Date(nowDate.getTime() + PREVIEW_TTL_SECONDS * 1000).toISOString(),
+  };
+
+  await redis.set(getPreviewKey(previewToken), record, { ex: PREVIEW_TTL_SECONDS });
+  return record;
+}
+
+/**
+ * 결제 직전 orderId <-> previewToken 매핑 기록 및 preview TTL 7,200초(2시간) 연장
+ */
+export async function linkOrderPreviewToken(options: {
+  orderId: string;
+  previewToken: string;
+}): Promise<{ linked: boolean; previewExists: boolean; expiresAt: string | null }> {
+  const cleanOrderId = options.orderId.trim();
+  const cleanPreviewToken = options.previewToken.trim();
+  if (!cleanOrderId || !cleanPreviewToken) {
+    return { linked: false, previewExists: false, expiresAt: null };
+  }
+
+  const redis = requireRedisClient();
+  const previewKey = getPreviewKey(cleanPreviewToken);
+  const existing = await redis.get<PreviewRecord>(previewKey);
+
+  if (!existing) {
+    return { linked: false, previewExists: false, expiresAt: null };
+  }
+
+  const refreshedExpiresAt = new Date(
+    Date.now() + PREVIEW_TTL_SECONDS * 1000
+  ).toISOString();
+  const refreshed: PreviewRecord = {
+    ...existing,
+    expiresAt: refreshedExpiresAt,
+  };
+
+  await redis.set(previewKey, refreshed, { ex: PREVIEW_TTL_SECONDS });
+  await redis.set(
+    getOrderPreviewKey(cleanOrderId),
+    {
+      orderId: cleanOrderId,
+      previewToken: cleanPreviewToken,
+      linkedAt: new Date().toISOString(),
+      expiresAt: refreshedExpiresAt,
+    },
+    { ex: PREVIEW_TTL_SECONDS }
+  );
+
+  return { linked: true, previewExists: true, expiresAt: refreshedExpiresAt };
+}
+
+/**
+ * 주문에 매핑된 previewToken 1회성 원자적 조회 및 소비(DEL)
+ */
+export async function consumePreviewForOrder(options: {
+  orderId: string;
+  previewToken?: string | null;
+}): Promise<PreviewRecord | null> {
+  const cleanOrderId = options.orderId.trim();
+  const redis = requireRedisClient();
+  const orderPreviewKey = getOrderPreviewKey(cleanOrderId);
+
+  let targetToken = options.previewToken?.trim() || "";
+  if (!targetToken) {
+    const mapped = await redis.get<{ previewToken?: string }>(orderPreviewKey);
+    if (mapped && typeof mapped.previewToken === "string") {
+      targetToken = mapped.previewToken.trim();
+    }
+  }
+
+  if (!targetToken) {
+    return null;
+  }
+
+  const previewKey = getPreviewKey(targetToken);
+  const raw = await redis.eval<string[], PreviewRecord | string | null>(
+    CONSUME_PREVIEW_LUA,
+    [previewKey, orderPreviewKey],
+    []
+  );
+
+  if (!raw) return null;
+  if (typeof raw === "string") {
+    try {
+      return JSON.parse(raw) as PreviewRecord;
+    } catch {
+      return null;
+    }
+  }
+  return raw;
+}
+
+/**
+ * 저장된 유료 결과(result:*) 단건 조회 (면접 질문 재시도용)
+ */
+export async function getStoredResultForOrder(
+  orderId: string
+): Promise<StoredResultRecord | null> {
+  const redis = requireRedisClient();
+  const result = await redis.get<StoredResultRecord>(getResultKey(orderId));
+  return result && typeof result === "object" ? result : null;
+}
+
+/**
+ * Branch A/부분 실패 시 추가 횟수 차감 없이 10개 면접 질문만 저장 업데이트
+ */
+export async function updateOrderInterviewQuestions(options: {
+  orderId: string;
+  interviewQuestions: InterviewQuestionItem[];
+  text?: string;
+}): Promise<StoredResultRecord | null> {
+  const redis = requireRedisClient();
+  const resultKey = getResultKey(options.orderId);
+  const existing = await redis.get<StoredResultRecord>(resultKey);
+  if (!existing) return null;
+
+  const expiresMs = Date.parse(existing.expiresAt);
+  const remainingTtl = Number.isFinite(expiresMs)
+    ? Math.max(60, Math.floor((expiresMs - Date.now()) / 1000))
+    : RESULT_TTL_SECONDS;
+
+  const updated: StoredResultRecord = {
+    ...existing,
+    interviewQuestions: options.interviewQuestions,
+    interviewPending: false,
+    interviewError: null,
+    ...(options.text ? { text: options.text } : {}),
+  };
+
+  await redis.set(resultKey, updated, { ex: remainingTtl });
+  return updated;
+}
+
+/**
+ * 생성 전 입력 누락/만료 등 검증 단계에서 중단 시 횟수 차감·환불 없이 예약 잠금만 원복
+ */
+export async function releaseOrderReservationWithoutDeduction(options: {
+  orderKey: string;
+  order: OrderRecord;
+}): Promise<OrderRecord> {
+  const { orderKey, order } = options;
+  const nowIso = new Date().toISOString();
+  const lockToken = order.generatingLockToken ?? null;
+  const totalGenerations = order.totalGenerations ?? PAID_GENERATIONS;
+  const restoredRemaining = order.reservedGeneration
+    ? Math.min(totalGenerations, order.remainingGenerations + 1)
+    : order.remainingGenerations;
+
+  const restoredOrder: OrderRecord = {
+    ...order,
+    status: (order.usedCount ?? 0) > 0 ? "done" : "paid",
+    remainingGenerations: restoredRemaining,
+    reservedGeneration: false,
+    generatingLockToken: null,
+    generatingAtMs: null,
+    updatedAt: nowIso,
+  };
+
+  await persistOrderAndReleaseLock({
+    orderKey,
+    order: restoredOrder,
+    expectedLockToken: lockToken,
+  });
+  await indexOrderKey(orderKey);
+  return restoredOrder;
 }
 
 export type FailureHandlingOutcome =

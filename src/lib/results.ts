@@ -40,6 +40,44 @@ export interface OrderRecord {
   verified?: boolean;
 }
 
+export interface ResumeQuestionItem {
+  id: string;
+  order: number;
+  title: string;
+  body: string;
+  charCount: number;
+  byteCount: number;
+}
+
+export interface LockedResumeQuestionItem {
+  id: string;
+  order: number;
+  title: string;
+  targetChars: number;
+  charCount: number;
+  byteCount: number;
+  isLocked: true;
+}
+
+export interface InterviewQuestionItem {
+  number: number;
+  category: string;
+  question: string;
+  intent: string;
+  answerTip: string;
+}
+
+export interface PreviewRecord {
+  previewToken: string;
+  jobTitle: string;
+  memo: string;
+  items: ResumeQuestionItem[];
+  usedModel: string;
+  thinkingLevel: string;
+  createdAt: string;
+  expiresAt: string;
+}
+
 export interface StoredResultRecord {
   orderId: string;
   serviceType: ServiceType;
@@ -50,6 +88,12 @@ export interface StoredResultRecord {
   receiptUrl: string | null;
   createdAt: string;
   expiresAt: string;
+  items?: ResumeQuestionItem[];
+  interviewQuestions?: InterviewQuestionItem[];
+  interviewPending?: boolean;
+  interviewError?: string | null;
+  jobTitle?: string | null;
+  sourceMemo?: string | null;
 }
 
 export function getOrderKey(orderId: string, serviceType: ServiceType): string {
@@ -58,6 +102,14 @@ export function getOrderKey(orderId: string, serviceType: ServiceType): string {
 
 export function getResultKey(orderId: string): string {
   return `result:${orderId}`;
+}
+
+export function getPreviewKey(previewToken: string): string {
+  return `preview:${previewToken}`;
+}
+
+export function getOrderPreviewKey(orderId: string): string {
+  return `order_preview:${orderId}`;
 }
 
 export function buildResultUrl(orderId: string, token: string): string {

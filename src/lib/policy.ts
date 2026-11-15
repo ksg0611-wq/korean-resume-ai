@@ -24,6 +24,17 @@ export const PAID_ORDER_TTL_SECONDS = 31_536_000;
 export const RESULT_TTL_DAYS = 7;
 export const RESULT_TTL_SECONDS = RESULT_TTL_DAYS * 24 * 60 * 60;
 
+/** 미결제 미리보기 토큰(preview:*) 및 주문 매핑 Redis 보관 기간 (2시간 = 7,200초) */
+export const PREVIEW_TTL_SECONDS = 7_200;
+
+/** 표준 자소서 4문항 구조 (P1.4 전 문항 일괄 생성 및 부분 공개 기준) */
+export const STANDARD_RESUME_QUESTIONS = [
+  { id: "q1", order: 1, title: "1. 지원동기 및 기관 이해", targetChars: 500 },
+  { id: "q2", order: 2, title: "2. 직무역량 및 문제해결 경험", targetChars: 500 },
+  { id: "q3", order: 3, title: "3. 협업·갈등 해결 경험", targetChars: 500 },
+  { id: "q4", order: 4, title: "4. 입사 후 포부 및 발전 계획", targetChars: 500 },
+] as const;
+
 export type FreeLimitKind = keyof typeof FREE_LIMITS;
 
 export function freeLimitButtonText(kind: FreeLimitKind): string {

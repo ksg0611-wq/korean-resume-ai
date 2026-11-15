@@ -46,6 +46,9 @@ export interface GenerateResult {
 export interface GenerateOptions {
   perAttemptTimeoutMs?: number;
   totalBudgetMs?: number;
+  responseMimeType?: string;
+  responseSchema?: any;
+  temperature?: number;
 }
 
 /**
@@ -127,14 +130,12 @@ export async function generateContentWithFallback(
   thinkingLevel: ThinkingLevel = GEMINI_CONFIG.THINKING_LEVEL,
   options?: GenerateOptions
 ): Promise<GenerateResult> {
-  const perAttemptTimeoutMs = Math.min(
-    options?.perAttemptTimeoutMs ?? GEMINI_CONFIG.PER_ATTEMPT_TIMEOUT_MS,
-    GEMINI_CONFIG.PER_ATTEMPT_TIMEOUT_MS
-  );
-  const totalBudgetMs = Math.min(
-    options?.totalBudgetMs ?? GEMINI_CONFIG.TOTAL_BUDGET_MS,
-    GEMINI_CONFIG.TOTAL_BUDGET_MS
-  );
+  const perAttemptTimeoutMs = options?.perAttemptTimeoutMs
+    ? Math.min(options.perAttemptTimeoutMs, 35_000)
+    : GEMINI_CONFIG.PER_ATTEMPT_TIMEOUT_MS;
+  const totalBudgetMs = options?.totalBudgetMs
+    ? Math.min(options.totalBudgetMs, 50_000)
+    : GEMINI_CONFIG.TOTAL_BUDGET_MS;
 
   const modelsToTry = Array.from(
     new Set([preferredModel, GEMINI_CONFIG.FALLBACK_MODEL])
@@ -144,6 +145,13 @@ export async function generateContentWithFallback(
     thinkingConfig: {
       thinkingLevel,
     },
+    ...(options?.responseMimeType
+      ? { responseMimeType: options.responseMimeType }
+      : {}),
+    ...(options?.responseSchema ? { responseSchema: options.responseSchema } : {}),
+    ...(typeof options?.temperature === "number"
+      ? { temperature: options.temperature }
+      : {}),
   };
 
   const startedAt = Date.now();

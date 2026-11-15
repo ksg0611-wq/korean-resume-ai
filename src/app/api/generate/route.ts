@@ -1,115 +1,162 @@
 import { NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { GEMINI_CONFIG, generateContentWithFallback } from "@/lib/gemini";
 import { checkFreeRateLimit } from "@/lib/redis";
 import { FREE_LIMITS, FREE_LIMIT_WINDOW } from "@/lib/policy";
-import { executePaidGeneration } from "@/lib/paymentHandlers";
+import { executePaidPackageGeneration } from "@/lib/paymentHandlers";
+import { savePreviewRecord } from "@/lib/orders";
+import {
+  buildLockedPreviewResponse,
+  generateFourQuestionsResume,
+} from "@/lib/packageGenerator";
 import { reportServerError } from "@/lib/alerts";
 
-// Vercel Serverless Function Execution Timeout (방어적 60초 설정)
 export const maxDuration = 60;
 
-export async function POST(req: Request) {
-  const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "dummy-api-key");
-  let parsedOrderId: string | null = null;
+function getClientIp(req: Request): string {
+  const forwarded = req.headers.get("x-forwarded-for");
+  if (forwarded) return forwarded.split(",")[0].trim();
+  return req.headers.get("x-real-ip")?.trim() || "127.0.0.1";
+}
 
+export async function POST(req: Request) {
+  let orderIdForLog: string | null = null;
   try {
     const body = await req.json();
-    const { jobTitle, memo, isFree, orderId, email } = body;
-    parsedOrderId = typeof orderId === "string" ? orderId.trim() : null;
+    const jobTitle = typeof body?.jobTitle === "string" ? body.jobTitle.trim() : "";
+    const memo = typeof body?.memo === "string" ? body.memo.trim() : "";
+    const isFree = Boolean(body?.isFree);
+    const orderId = typeof body?.orderId === "string" ? body.orderId.trim() : "";
+    const email = typeof body?.email === "string" ? body.email.trim() : null;
+    const previewToken =
+      typeof body?.previewToken === "string" ? body.previewToken.trim() : null;
+    const fromDiagnosis = Boolean(body?.fromDiagnosis);
+    const diagnosticWeaknesses = Array.isArray(body?.diagnosticWeaknesses)
+      ? body.diagnosticWeaknesses
+      : undefined;
 
-    // ── Strict Field Validation ──
-    if (typeof jobTitle !== "string" || !jobTitle.trim()) {
-      return NextResponse.json(
-        { error: "Bad Request. 'jobTitle' (string) is required." },
-        { status: 400 }
-      );
-    }
-    if (typeof memo !== "string" || !memo.trim()) {
-      return NextResponse.json(
-        { error: "Bad Request. 'memo' (string) is required." },
-        { status: 400 }
-      );
-    }
-    if (typeof isFree !== "boolean") {
-      return NextResponse.json(
-        { error: "Bad Request. 'isFree' (boolean) is required." },
-        { status: 400 }
-      );
-    }
-    if (!isFree && (!parsedOrderId || !parsedOrderId.trim())) {
-      return NextResponse.json(
-        { error: "Bad Request. 'orderId' (string) is required for paid requests." },
-        { status: 400 }
-      );
-    }
+    orderIdForLog = orderId || null;
 
-    // ── Prompt Engineering ──
-    const systemInstruction = `
-당신은 한국 시장에 최적화된 전문 자기소개서 컨설턴트입니다.
-사용자가 제공한 경험을 바탕으로 완벽한 자기소개서 초안을 작성해주세요.
-
-다음 규칙을 반드시 준수하세요:
-1. 답변 상단에 내용을 요약한 [소제목]을 포함할 것. (소제목은 반드시 15자 내외로 작성할 것. 절대 20자를 초과하지 마시오.)
-2. 본문은 STAR(상황 Situation, 과제 Task, 행동 Action, 결과 Result) 프레임워크 구조로 마크다운(Markdown) 포맷에 맞춰 명확하게 구분하여 작성할 것.
-3. 어투는 반드시 한국어 비즈니스 톤('~했습니다', '~합니다')을 사용할 것.
-`;
-
-    const fullPrompt = `${systemInstruction}\n\n지원 직무: ${jobTitle.trim()}\n\n사용자 경험 요약:\n${memo.trim()}`;
-
-    if (!isFree && parsedOrderId) {
-      return await executePaidGeneration({
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      await reportServerError({
+        route: "/api/generate",
+        statusCode: 500,
+        error: "GEMINI_API_KEY is not configured",
+        orderId: orderIdForLog,
         serviceType: "resume",
+      });
+      return NextResponse.json(
+        { error: "서버 AI 설정이 완료되지 않았습니다." },
+        { status: 500 }
+      );
+    }
+
+    const genAI = new GoogleGenerativeAI(apiKey);
+
+    if (!isFree) {
+      if (!orderId) {
+        return NextResponse.json(
+          { error: "결제 주문번호(orderId)가 필요합니다." },
+          { status: 400 }
+        );
+      }
+
+      return await executePaidPackageGeneration({
         routePath: "/api/generate",
-        orderId: parsedOrderId,
+        orderId,
         genAI,
-        prompt: fullPrompt,
-        resultTitle: `AI 자기소개서 초안 (${jobTitle.trim()})`,
+        jobTitle,
+        memo,
+        previewToken,
+        fromDiagnosis,
+        diagnosticWeaknesses,
         optionalEmail: email,
       });
     }
 
-    // ── Free Tier Rate Limiting & Execution ──
-    const ip = (req.headers.get("x-forwarded-for") ?? "127.0.0.1").split(",")[0].trim();
+    // 무료 체험 (전 문항 일괄 생성 후 1문항 공개 + 2~4문항 잠금)
+    if (!memo) {
+      return NextResponse.json(
+        { error: "핵심 경험 메모를 입력해 주세요." },
+        { status: 400 }
+      );
+    }
+
+    const ip = getClientIp(req);
     const allowed = await checkFreeRateLimit({
       key: `ratelimit_free_${ip}`,
       maxRequests: FREE_LIMITS.resume,
       window: FREE_LIMIT_WINDOW,
     });
+
     if (!allowed) {
       return NextResponse.json(
-        { error: `Too Many Requests. Free tier limit exceeded (${FREE_LIMITS.resume} per 24h).` },
+        {
+          error: `하루 무료 이용 한도(${FREE_LIMITS.resume}회)를 모두 소진했습니다. 유료 결제를 통해 4문항 전체와 맞춤 면접 질문 10선을 즉시 확인해 보세요.`,
+          code: "FREE_LIMIT_EXCEEDED",
+        },
         { status: 429 }
       );
     }
 
-    const genResult = await generateContentWithFallback(
+    const draftResult = await generateFourQuestionsResume({
       genAI,
-      fullPrompt,
-      GEMINI_CONFIG.PRIMARY_MODEL,
-      GEMINI_CONFIG.THINKING_LEVEL
+      jobTitle,
+      memo,
+      perAttemptTimeoutMs: 30_000,
+      totalBudgetMs: 45_000,
+    });
+
+    let storedPreviewToken: string | null = null;
+    let previewExpiresAt: string | null = null;
+
+    try {
+      const saved = await savePreviewRecord({
+        jobTitle,
+        memo,
+        items: draftResult.items,
+        usedModel: draftResult.usedModel,
+        thinkingLevel: draftResult.thinkingLevel,
+      });
+      storedPreviewToken = saved.previewToken;
+      previewExpiresAt = saved.expiresAt;
+    } catch (previewErr) {
+      console.error(
+        "[Preview Fallback] Redis error during free preview save. Continuing without stored previewToken:",
+        previewErr
+      );
+    }
+
+    const { previewItems, lockedItems } = buildLockedPreviewResponse(
+      draftResult.items
     );
 
     return NextResponse.json({
       success: true,
-      text: genResult.text,
-      usedModel: genResult.usedModel,
-      thinkingLevel: genResult.thinkingLevel,
-      attempts: genResult.attempts,
-      durationMs: genResult.durationMs,
-      usage: genResult.usage,
+      mode: "draft",
+      isFree: true,
+      previewToken: storedPreviewToken,
+      previewExpiresAt,
+      text: previewItems[0]?.body || "",
+      items: previewItems,
+      lockedItems,
+      usedModel: draftResult.usedModel,
+      thinkingLevel: draftResult.thinkingLevel,
+      attempts: draftResult.attempts,
+      durationMs: draftResult.durationMs,
+      usage: draftResult.usage,
     });
-  } catch (error: any) {
-    console.error("Error generating resume:", error);
+  } catch (error) {
+    console.error("[/api/generate] Error:", error);
     await reportServerError({
       route: "/api/generate",
       statusCode: 500,
       error,
-      orderId: parsedOrderId,
+      orderId: orderIdForLog,
       serviceType: "resume",
     });
     return NextResponse.json(
-      { error: "Internal Server Error" },
+      { error: "자소서 생성 중 일시적인 오류가 발생했습니다. 잠시 후 다시 시도해 주세요." },
       { status: 500 }
     );
   }
