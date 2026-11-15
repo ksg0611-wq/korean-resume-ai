@@ -4,7 +4,7 @@ import { useState } from "react";
 import type { AdminOrderFilter, AdminOrderSummary } from "@/lib/orders";
 import type { OrderRecord } from "@/lib/results";
 
-type AdminOrderRow = OrderRecord & { isMismatch?: boolean };
+type AdminOrderRow = OrderRecord & { isMismatch?: boolean; isStuck?: boolean };
 
 const STATUS_BADGE: Record<OrderRecord["status"], { label: string; cls: string }> = {
   paid: { label: "결제완료 · 미생성(paid)", cls: "bg-amber-100 text-amber-800 border-amber-200" },
@@ -161,7 +161,7 @@ export default function AdminOrdersClient() {
               결제 · 생성 상태 & 자동 환불 점검 대시보드
             </h1>
             <p className="text-xs text-gray-500 mt-1">
-              불일치(`paid` / `generating` / `failed`) 및 자동 환불(`refunded`) 주문을 실시간으로 점검합니다.
+              불일치(`paid` / `generating` / `refund_failed` / `failed`), 180초 이상 고착(`stuck`), 자동 환불(`refunded`) 주문을 실시간으로 점검합니다.
             </p>
           </div>
           <div className="flex gap-2">
@@ -190,7 +190,7 @@ export default function AdminOrdersClient() {
 
         {/* 요약 카드 */}
         {summary && (
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
             <div className="bg-white p-4 rounded-xl border border-gray-200">
               <p className="text-xs text-gray-500">전체 주문</p>
               <p className="text-2xl font-extrabold text-gray-900 mt-1">{summary.total}</p>
@@ -198,6 +198,10 @@ export default function AdminOrdersClient() {
             <div className="bg-amber-50 p-4 rounded-xl border border-amber-200">
               <p className="text-xs text-amber-800 font-semibold">불일치 점검 대상</p>
               <p className="text-2xl font-extrabold text-amber-900 mt-1">{summary.mismatchCount}</p>
+            </div>
+            <div className="bg-orange-50 p-4 rounded-xl border border-orange-200">
+              <p className="text-xs text-orange-800 font-semibold">고착 (stuck · 180초+)</p>
+              <p className="text-2xl font-extrabold text-orange-900 mt-1">{summary.stuck}</p>
             </div>
             <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-200">
               <p className="text-xs text-emerald-700 font-semibold">생성 완료(done)</p>
@@ -212,8 +216,10 @@ export default function AdminOrdersClient() {
               <p className="text-2xl font-extrabold text-gray-800 mt-1">{summary.paid}</p>
             </div>
             <div className="bg-red-50 p-4 rounded-xl border border-red-200">
-              <p className="text-xs text-red-700 font-semibold">실패(failed)</p>
-              <p className="text-2xl font-extrabold text-red-800 mt-1">{summary.failed}</p>
+              <p className="text-xs text-red-700 font-semibold">환불실패·오류</p>
+              <p className="text-2xl font-extrabold text-red-800 mt-1">
+                {summary.refundFailed + summary.failed}
+              </p>
             </div>
           </div>
         )}
@@ -224,7 +230,8 @@ export default function AdminOrdersClient() {
             {(
               [
                 { id: "all", label: "전체 보기" },
-                { id: "mismatch", label: "결제-생성 불일치 (paid/generating/failed)" },
+                { id: "mismatch", label: "결제-생성 불일치 (paid/generating/refund_failed)" },
+                { id: "stuck", label: "고착 (stuck · 180초+)" },
                 { id: "refunded", label: "자동 환불 내역 (refunded)" },
                 { id: "done", label: "생성 완료 (done)" },
               ] as const
@@ -310,6 +317,13 @@ export default function AdminOrdersClient() {
                         <span className={`inline-block px-2 py-0.5 rounded-md border font-bold text-[11px] ${badge.cls}`}>
                           {badge.label}
                         </span>
+                        {order.isStuck && (
+                          <div className="mt-1">
+                            <span className="inline-block px-2 py-0.5 rounded-md border font-bold text-[10px] bg-orange-100 text-orange-800 border-orange-300">
+                              고착(stuck 180초+)
+                            </span>
+                          </div>
+                        )}
                       </td>
                       <td className="py-3 px-3 align-top font-semibold whitespace-nowrap">
                         {order.amount.toLocaleString("ko-KR")}원
@@ -327,6 +341,7 @@ export default function AdminOrdersClient() {
                       </td>
                       <td className="py-3 px-3 align-top whitespace-nowrap space-y-0.5 text-[11px] text-gray-600">
                         <div>결제: {fmtTime(order.paidAt)}</div>
+                        {order.generatingAt && <div>시작: {fmtTime(order.generatingAt)}</div>}
                         {order.doneAt && <div>완료: {fmtTime(order.doneAt)}</div>}
                         {order.refundedAt && <div className="text-purple-700">환불: {fmtTime(order.refundedAt)}</div>}
                         {order.failedAt && <div className="text-red-600">실패: {fmtTime(order.failedAt)}</div>}

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { timingSafeEqualStrings } from "@/lib/results";
 import {
   isOrderMismatch,
+  isOrderStuck,
   listAdminOrders,
   type AdminOrderFilter,
 } from "@/lib/orders";
@@ -41,7 +42,10 @@ export async function GET(req: Request) {
     const url = new URL(req.url);
     const rawFilter = url.searchParams.get("filter") || "all";
     const filter: AdminOrderFilter =
-      rawFilter === "mismatch" || rawFilter === "refunded" || rawFilter === "done"
+      rawFilter === "mismatch" ||
+      rawFilter === "stuck" ||
+      rawFilter === "refunded" ||
+      rawFilter === "done"
         ? rawFilter
         : "all";
     const limitParam = Number(url.searchParams.get("limit") || "100");
@@ -49,6 +53,7 @@ export async function GET(req: Request) {
     const orderId = url.searchParams.get("orderId");
 
     const data = await listAdminOrders({ filter, limit, orderId });
+    const nowMs = Date.now();
 
     return NextResponse.json(
       {
@@ -58,6 +63,7 @@ export async function GET(req: Request) {
         orders: data.orders.map((order) => ({
           ...order,
           isMismatch: isOrderMismatch(order),
+          isStuck: isOrderStuck(order, nowMs),
         })),
       },
       {

@@ -607,16 +607,55 @@ export interface AdminOrderSummary {
   total: number;
   paid: number;
   generating: number;
+  stuck: number;
   done: number;
   refunded: number;
+  refundFailed: number;
   failed: number;
   mismatchCount: number;
 }
 
-export type AdminOrderFilter = "all" | "mismatch" | "refunded" | "done";
+export type AdminOrderFilter = "all" | "mismatch" | "stuck" | "refunded" | "done";
+
+export function isOrderStuck(
+  order: Partial<OrderRecord>,
+  nowMs: number = Date.now()
+): boolean {
+  if (order.status !== "generating") return false;
+  const genMs =
+    typeof order.generatingAtMs === "number"
+      ? order.generatingAtMs
+      : order.generatingAt
+        ? Date.parse(order.generatingAt)
+        : NaN;
+  if (!Number.isFinite(genMs)) return true;
+  return nowMs - genMs >= GENERATING_STALE_MS;
+}
 
 export function isOrderMismatch(order: Partial<OrderRecord>): boolean {
-  return order.status === "paid" || order.status === "generating" || order.status === "failed";
+  return (
+    order.status === "paid" ||
+    order.status === "generating" ||
+    order.status === "refund_failed" ||
+    order.status === "failed"
+  );
+}
+
+function buildAdminSummary(
+  orders: OrderRecord[],
+  nowMs: number
+): AdminOrderSummary {
+  return {
+    total: orders.length,
+    paid: orders.filter((o) => o.status === "paid").length,
+    generating: orders.filter((o) => o.status === "generating").length,
+    stuck: orders.filter((o) => isOrderStuck(o, nowMs)).length,
+    done: orders.filter((o) => o.status === "done").length,
+    refunded: orders.filter((o) => o.status === "refunded").length,
+    refundFailed: orders.filter((o) => o.status === "refund_failed").length,
+    failed: orders.filter((o) => o.status === "failed").length,
+    mismatchCount: orders.filter((o) => isOrderMismatch(o)).length,
+  };
 }
 
 /**
@@ -630,20 +669,12 @@ export async function listAdminOrders(options?: {
   const filter = options?.filter ?? "all";
   const limit = Math.min(Math.max(options?.limit ?? 100, 1), 300);
   const targetOrderId = options?.orderId?.trim();
+  const nowMs = Date.now();
 
   if (targetOrderId) {
     const found = await findOrderById(targetOrderId);
     const list = found ? [found.order] : [];
-    const summary: AdminOrderSummary = {
-      total: list.length,
-      paid: list.filter((o) => o.status === "paid").length,
-      generating: list.filter((o) => o.status === "generating").length,
-      done: list.filter((o) => o.status === "done").length,
-      refunded: list.filter((o) => o.status === "refunded").length,
-      failed: list.filter((o) => o.status === "failed").length,
-      mismatchCount: list.filter((o) => isOrderMismatch(o)).length,
-    };
-    return { summary, orders: list };
+    return { summary: buildAdminSummary(list, nowMs), orders: list };
   }
 
   const redis = requireRedisClient();
@@ -653,15 +684,7 @@ export async function listAdminOrders(options?: {
 
   if (!keys || keys.length === 0) {
     return {
-      summary: {
-        total: 0,
-        paid: 0,
-        generating: 0,
-        done: 0,
-        refunded: 0,
-        failed: 0,
-        mismatchCount: 0,
-      },
+      summary: buildAdminSummary([], nowMs),
       orders: [],
     };
   }
@@ -671,18 +694,11 @@ export async function listAdminOrders(options?: {
     (item): item is OrderRecord => Boolean(item && typeof item === "object")
   );
 
-  const summary: AdminOrderSummary = {
-    total: allOrders.length,
-    paid: allOrders.filter((o) => o.status === "paid").length,
-    generating: allOrders.filter((o) => o.status === "generating").length,
-    done: allOrders.filter((o) => o.status === "done").length,
-    refunded: allOrders.filter((o) => o.status === "refunded").length,
-    failed: allOrders.filter((o) => o.status === "failed").length,
-    mismatchCount: allOrders.filter((o) => isOrderMismatch(o)).length,
-  };
+  const summary = buildAdminSummary(allOrders, nowMs);
 
   const filtered = allOrders.filter((order) => {
     if (filter === "mismatch") return isOrderMismatch(order);
+    if (filter === "stuck") return isOrderStuck(order, nowMs);
     if (filter === "refunded") return order.status === "refunded";
     if (filter === "done") return order.status === "done";
     return true;
