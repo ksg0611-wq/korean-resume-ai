@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
-import { generateContentWithFallback } from "@/lib/gemini";
+import { GEMINI_CONFIG, generateContentWithFallback } from "@/lib/gemini";
 
 // Vercel Serverless Function Execution Timeout (방어적 60초 설정)
 export const maxDuration = 60;
@@ -131,14 +131,20 @@ export async function POST(req: Request) {
 
     const fullPrompt = `${systemInstruction}\n\n지원자 자기소개서:\n${resumeText.trim()}`;
 
-    // Gemini 3.8 Flash 호출 (실패 시 3.7 Flash 등 투명한 자동 폴백)
-    const genResult = await generateContentWithFallback(genAI, fullPrompt, "gemini-3.8-flash");
+    // Gemini 3.8 Flash (thinkingLevel: medium) 공통 설정 호출
+    const genResult = await generateContentWithFallback(
+      genAI,
+      fullPrompt,
+      GEMINI_CONFIG.PRIMARY_MODEL,
+      GEMINI_CONFIG.THINKING_LEVEL
+    );
     const responseText = genResult.text;
 
     return NextResponse.json({
       success: true,
       text: responseText,
       usedModel: genResult.usedModel,
+      thinkingLevel: genResult.thinkingLevel,
       usage: genResult.usage,
     });
   } catch (error: any) {
