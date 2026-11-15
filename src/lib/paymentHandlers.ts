@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type { GoogleGenerativeAI } from "@google/generative-ai";
 import { GEMINI_CONFIG, generateContentWithFallback } from "@/lib/gemini";
 import { reportServerError, sanitizeErrorText } from "@/lib/alerts";
-import { confirmTossPayment } from "@/lib/toss";
+import { confirmTossPayment, cancelTossPayment } from "@/lib/toss";
 import { sendResultEmail } from "@/lib/email";
 import {
   beginPaidGeneration,
@@ -18,8 +18,8 @@ import {
   generateFourQuestionsResume,
   generateTenInterviewQuestions,
 } from "@/lib/packageGenerator";
-import { normalizeEmail } from "@/lib/policy";
-import type { InterviewQuestionItem, ServiceType } from "@/lib/results";
+import { normalizeEmail, PRICING_PLANS } from "@/lib/policy";
+import type { InterviewQuestionItem, PlanType, ServiceType } from "@/lib/results";
 import { BUSINESS_INFO } from "@/lib/siteConfig";
 
 /**
@@ -27,9 +27,13 @@ import { BUSINESS_INFO } from "@/lib/siteConfig";
  */
 export async function handleConfirmPaymentRequest(
   req: Request,
-  options: { serviceType: ServiceType; routePath: string }
+  options: {
+    serviceType: ServiceType;
+    routePath: string;
+    allowedAmounts?: number[];
+  }
 ): Promise<NextResponse> {
-  const { serviceType, routePath } = options;
+  const { serviceType, routePath, allowedAmounts } = options;
   let orderIdForLog: string | null = null;
 
   try {
@@ -37,8 +41,26 @@ export async function handleConfirmPaymentRequest(
     const { paymentKey, orderId, amount, email } = body || {};
     orderIdForLog = typeof orderId === "string" ? orderId : null;
 
-    if (!paymentKey || !orderId || !amount) {
+    if (!paymentKey || !orderId || amount === undefined || amount === null) {
       return NextResponse.json({ message: "Bad Request" }, { status: 400 });
+    }
+
+    const numericAmount = Number(amount);
+    if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
+      return NextResponse.json(
+        { message: "결제 금액이 유효하지 않습니다." },
+        { status: 400 }
+      );
+    }
+
+    if (allowedAmounts && allowedAmounts.length > 0 && !allowedAmounts.includes(numericAmount)) {
+      return NextResponse.json(
+        {
+          message: `허용되지 않은 결제 금액(${numericAmount}원)입니다.`,
+          code: "INVALID_PAYMENT_AMOUNT",
+        },
+        { status: 403 }
+      );
     }
 
     const confirmResult = await confirmTossPayment({
@@ -56,17 +78,49 @@ export async function handleConfirmPaymentRequest(
     }
 
     const paymentData = confirmResult.data;
+    const confirmedAmount =
+      typeof paymentData?.totalAmount === "number"
+        ? paymentData.totalAmount
+        : numericAmount;
+
+    if (
+      allowedAmounts &&
+      allowedAmounts.length > 0 &&
+      !allowedAmounts.includes(confirmedAmount)
+    ) {
+      await cancelTossPayment({
+        paymentKey,
+        cancelReason: `서버 검증 결제 금액 불일치 자동 취소 (${confirmedAmount}원)`,
+        orderId,
+        route: routePath,
+      });
+      return NextResponse.json(
+        {
+          message: "결제 금액 검증에 실패하여 자동 취소되었습니다.",
+          code: "PAYMENT_AMOUNT_MISMATCH",
+        },
+        { status: 403 }
+      );
+    }
+
     const resolvedEmail =
       normalizeEmail(email) || normalizeEmail(paymentData?.customerEmail);
+
+    const inferredPlanType: PlanType =
+      serviceType === "interview"
+        ? confirmedAmount === PRICING_PLANS.interview_upgrade.price
+          ? "interview_upgrade"
+          : "interview_single"
+        : confirmedAmount === PRICING_PLANS.bundle.price
+          ? "bundle"
+          : "resume_single";
 
     const { order, alreadyConfirmed } = await saveConfirmedOrder({
       orderId,
       serviceType,
+      planType: inferredPlanType,
       paymentKey,
-      amount:
-        typeof paymentData?.totalAmount === "number"
-          ? paymentData.totalAmount
-          : Number(amount),
+      amount: confirmedAmount,
       email: resolvedEmail,
       receiptUrl:
         typeof paymentData?.receipt?.url === "string"
@@ -81,9 +135,11 @@ export async function handleConfirmPaymentRequest(
       order: {
         orderId: order.orderId,
         serviceType: order.serviceType,
+        planType: order.planType,
         status: order.status,
         amount: order.amount,
         paidAt: order.paidAt,
+        totalGenerations: order.totalGenerations,
         remainingGenerations: order.remainingGenerations,
       },
     });

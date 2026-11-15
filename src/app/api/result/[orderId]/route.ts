@@ -75,6 +75,9 @@ export async function GET(
         items: result.items ?? null,
         interviewQuestions: result.interviewQuestions ?? null,
         interviewPending: Boolean(result.interviewPending),
+        interviewSessionId:
+          order.activeSessionId || result.interviewSessionId || null,
+        interviewNote: result.interviewNote ?? null,
         jobTitle: result.jobTitle ?? null,
         sourceMemo: result.sourceMemo ?? null,
         createdAt: result.createdAt,
