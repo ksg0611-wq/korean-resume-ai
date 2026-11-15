@@ -10,6 +10,10 @@ export const dynamic = 'force-dynamic';
 export const metadata: Metadata = {
   title: '공공기관 채용공고 큐레이션 | Korea Resume AI',
   description: '기획재정부 알리오 공식 API 기반 실시간 공공기관 채용공고 및 경영·사무 직무 맞춤형 큐레이션',
+  // 페이지네이션·필터 쿼리(?page=2 등)와 무관하게 목록 canonical은 /jobs 로 고정
+  alternates: {
+    canonical: '/jobs',
+  },
 };
 
 interface JobsPageProps {

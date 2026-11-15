@@ -7,9 +7,6 @@ export const metadata: Metadata = {
   metadataBase: new URL('https://korea-resume.com'),
   title: "Korea Resume AI",
   description: "STAR 프레임워크와 직무별 키워드 매핑 로직을 적용해 완벽한 자소서 초안을 만듭니다.",
-  alternates: {
-    canonical: 'https://korea-resume.com',
-  },
 };
 
 export default function RootLayout({

@@ -22,6 +22,9 @@ export async function generateMetadata({ params }: JobDetailPageProps): Promise<
   return {
     title: `[${job.inst_name}] ${job.title} | Korea Resume AI`,
     description: `${job.inst_name} ${job.recruit_type_name || ''} 채용공고 상세 및 AI 자소서 준비`,
+    alternates: {
+      canonical: `/jobs/${sn}`,
+    },
   };
 }
 
