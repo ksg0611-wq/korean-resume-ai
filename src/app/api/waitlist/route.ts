@@ -49,7 +49,8 @@ export async function POST(request: Request) {
       RETURNING id, created_at;
     `, [snNum, cleanEmail]);
 
-    console.log(`[Waitlist] Successfully registered: ${cleanEmail} for sn ${snNum} (${instName || '기관명 미지정'})`);
+    // 개인정보(이메일)는 런타임 로그에 남기지 않습니다.
+    console.log(`[Waitlist] Successfully registered for sn ${snNum} (${instName || '기관명 미지정'})`);
 
     return NextResponse.json({
       success: true,

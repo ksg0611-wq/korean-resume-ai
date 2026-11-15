@@ -135,7 +135,7 @@ export default function PreviewCard() {
               </span>
               <span className="text-xs text-emerald-700 font-semibold">구체적 성과 중심 완성본</span>
             </div>
-            <span className="text-[11px] text-emerald-600 font-medium hidden sm:inline">합격률 제고</span>
+            <span className="text-[11px] text-emerald-600 font-medium hidden sm:inline">구체성 강화</span>
           </div>
           
           <div className="space-y-2.5 text-xs sm:text-sm text-gray-800 leading-relaxed">

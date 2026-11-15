@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { Redis } from "@upstash/redis";
+import { PAID_GENERATIONS } from "@/lib/policy";
 
 export async function POST(req: Request) {
   try {
@@ -45,7 +46,7 @@ export async function POST(req: Request) {
 
     await redis.set(`order:interview:${orderId}`, {
       paid: true,
-      remainingGenerations: 3,
+      remainingGenerations: PAID_GENERATIONS,
       verified: true
     });
 

@@ -72,7 +72,7 @@ export default function PrivacyPage() {
               <tr>
                 <td className={td}>자기소개서·경험 입력 원문</td>
                 <td className={td}>회사 DB·Redis에 저장하지 않음</td>
-                <td className={td}>생성 요청을 처리하는 동안에만 서버 메모리에서 처리 (미저장)</td>
+                <td className={td}>생성 요청을 처리하는 동안에만 서버 메모리에서 처리하며 생성 즉시 처리 후 폐기합니다 (미저장)</td>
               </tr>
               <tr>
                 <td className={td}>AI 생성 결과물</td>

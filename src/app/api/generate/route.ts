@@ -3,6 +3,7 @@ import type { Redis } from "@upstash/redis";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { GEMINI_CONFIG, generateContentWithFallback } from "@/lib/gemini";
 import { checkFreeRateLimit, requireRedisClient } from "@/lib/redis";
+import { FREE_LIMITS, FREE_LIMIT_WINDOW } from "@/lib/policy";
 
 // Vercel Serverless Function Execution Timeout (방어적 60초 설정)
 export const maxDuration = 60;
@@ -52,12 +53,12 @@ export async function POST(req: Request) {
       // Free tier: slidingWindow 2 req / 24h per IP (Redis 장애 시 안전 폴백)
       const allowed = await checkFreeRateLimit({
         key: `ratelimit_free_${ip}`,
-        maxRequests: 2,
-        window: "24 h",
+        maxRequests: FREE_LIMITS.resume,
+        window: FREE_LIMIT_WINDOW,
       });
       if (!allowed) {
         return NextResponse.json(
-          { error: "Too Many Requests. Free tier limit exceeded (2 per 24h)." },
+          { error: `Too Many Requests. Free tier limit exceeded (${FREE_LIMITS.resume} per 24h).` },
           { status: 429 }
         );
       }

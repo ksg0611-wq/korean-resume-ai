@@ -5,6 +5,14 @@ import { loadPaymentWidget, PaymentWidgetInstance } from "@tosspayments/payment-
 import PaymentSection from "@/components/PaymentSection";
 import InterviewPreviewCard from "@/components/InterviewPreviewCard";
 import FAQAccordion from "@/components/FAQAccordion";
+import {
+  PAID_GENERATIONS,
+  PAID_SUB_TEXT,
+  freeLimitButtonText,
+  freeLimitExceededMessage,
+} from "@/lib/policy";
+
+const INTERVIEW_BENEFIT_TEXT = `STAR 기반 심화 질문 ${PAID_GENERATIONS}회 생성 포함`;
 
 const clientKey = process.env.NEXT_PUBLIC_TOSS_CLIENT_KEY || "test_gck_EXAMPLETEST";
 const customerKey = "GUEST"; // 비회원 결제
@@ -125,7 +133,7 @@ function InterviewContent() {
       const orderId = "int_" + Math.random().toString(36).substring(2, 11);
       await paymentWidget.requestPayment({
         orderId,
-        orderName: "STAR 기반 심화 질문 3회 생성 포함",
+        orderName: INTERVIEW_BENEFIT_TEXT,
         successUrl: window.location.origin + "/interview/payments/success",
         failUrl: window.location.origin + "/payments/fail",
       });
@@ -227,7 +235,7 @@ function InterviewContent() {
 
       if (!res.ok) {
         if (res.status === 429) {
-          throw new Error("무료 생성 횟수(일 1회)가 초과되었습니다.");
+          throw new Error(freeLimitExceededMessage("interview"));
         }
         if (res.status === 403) {
           throw new Error("결제 정보가 유효하지 않거나 사용 횟수를 모두 소진했습니다.");
@@ -326,18 +334,18 @@ function InterviewContent() {
               agreedToRefundPolicy={agreedToRefundPolicy}
               onAgreedChange={setAgreedToRefundPolicy}
               refundCheckboxId="interview-refund-agree"
-              guaranteeBenefitText="STAR 기반 심화 질문 3회 생성 포함"
+              guaranteeBenefitText={INTERVIEW_BENEFIT_TEXT}
               error={error}
               paymentState={paymentState}
               paymentTimeoutMsg={paymentTimeoutMsg}
               onRetryPayment={handleRetryPayment}
               onPaymentClick={handlePaymentClick}
               paidButtonText={`${PRICE_DISPLAY}원 결제하고 심화 질문 생성하기`}
-              paidButtonSubText="3회 포함"
+              paidButtonSubText={PAID_SUB_TEXT}
               processingText="결제창을 준비하고 있습니다..."
               isGenerating={isGenerating}
               onFreeGenerate={() => handleGenerate()}
-              freeButtonText="먼저 무료로 생성하기 (일 1회 제한)"
+              freeButtonText={freeLimitButtonText("interview")}
               generatingText="AI 면접 질문 생성 중..."
               generatingBannerText="AI가 자소서를 바탕으로 실전 압박 질문을 작성 중입니다 (보통 15~20초 소요)"
               widgetContainerId="interview-payment-widget"
@@ -364,8 +372,8 @@ function InterviewContent() {
                 <svg className="w-4 h-4 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                 </svg>
-                <span className="font-bold text-gray-900 text-xs">서버 미저장</span>
-                <span className="text-[10px] text-gray-500">즉시 파기</span>
+                <span className="font-bold text-gray-900 text-xs">입력 원문 미저장</span>
+                <span className="text-[10px] text-gray-500">생성 즉시 처리</span>
               </div>
             </div>
           </div>

@@ -6,6 +6,14 @@ import { loadPaymentWidget, PaymentWidgetInstance } from "@tosspayments/payment-
 import PreviewCard from "@/components/PreviewCard";
 import PaymentSection from "@/components/PaymentSection";
 import FAQAccordion from "@/components/FAQAccordion";
+import {
+  FREE_LIMITS,
+  PAID_BENEFIT_TEXT,
+  PAID_GENERATIONS,
+  PAID_SUB_TEXT,
+  freeLimitButtonText,
+  freeLimitExceededMessage,
+} from "@/lib/policy";
 
 const clientKey = process.env.NEXT_PUBLIC_TOSS_CLIENT_KEY || "test_gck_EXAMPLETEST";
 const customerKey = "GUEST"; // 비회원 결제
@@ -124,7 +132,7 @@ export default function Home() {
       const orderId = "order_" + Math.random().toString(36).substring(2, 11);
       await paymentWidget.requestPayment({
         orderId,
-        orderName: "자기소개서 AI 생성 (3회권)",
+        orderName: `자기소개서 AI 생성 (${PAID_GENERATIONS}회권)`,
         successUrl: window.location.origin + "/payments/success",
         failUrl: window.location.origin + "/payments/fail",
       });
@@ -239,7 +247,7 @@ export default function Home() {
 
       if (!res.ok) {
         if (res.status === 429) {
-          throw new Error("무료 생성 횟수(일 2회)가 초과되었습니다.");
+          throw new Error(freeLimitExceededMessage("resume"));
         }
         if (res.status === 403) {
           throw new Error("결제 정보가 유효하지 않거나 사용 횟수를 모두 소진했습니다.");
@@ -304,7 +312,7 @@ export default function Home() {
             {/* 헤드라인 */}
             <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-gray-900 tracking-tight leading-[1.2] mb-3">
               막막한 한 줄을<br />
-              <span className="text-blue-600">합격하는 자소서</span>로
+              <span className="text-blue-600">완성도 높은 자소서 초안</span>으로
             </h1>
 
             {/* 서브카피 */}
@@ -329,7 +337,7 @@ export default function Home() {
                 <svg className="w-4 h-4 text-emerald-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
                 </svg>
-                <span>1회 결제 · 3회 재생성 포함</span>
+                <span>{`1회 결제 · ${PAID_GENERATIONS}회 생성/재생성 포함`}</span>
               </div>
             </div>
 
@@ -350,7 +358,7 @@ export default function Home() {
                 onClick={scrollToForm}
                 className="text-xs sm:text-sm text-gray-500 hover:text-blue-600 underline font-medium text-center py-1 transition-colors cursor-pointer"
               >
-                먼저 무료로 1회 체험하기
+                {`먼저 무료로 체험하기 (일 ${FREE_LIMITS.resume}회)`}
               </button>
             </div>
 
@@ -376,8 +384,8 @@ export default function Home() {
                 <svg className="w-4 h-4 sm:w-5 sm:h-5 text-indigo-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                 </svg>
-                <span className="font-bold text-gray-900 text-[11px] sm:text-xs">서버 미저장</span>
-                <span className="text-[9.5px] sm:text-[11px] text-gray-500">즉시 파기</span>
+                <span className="font-bold text-gray-900 text-[11px] sm:text-xs">입력 원문 미저장</span>
+                <span className="text-[9.5px] sm:text-[11px] text-gray-500">생성 즉시 처리</span>
               </div>
             </div>
           </div>
@@ -447,17 +455,17 @@ export default function Home() {
           agreedToRefundPolicy={agreedToRefundPolicy}
           onAgreedChange={setAgreedToRefundPolicy}
           refundCheckboxId="refund-agree"
-          guaranteeBenefitText="STAR 기반 3회 생성/재생성 포함"
+          guaranteeBenefitText={PAID_BENEFIT_TEXT}
           error={error}
           paymentState={paymentState}
           paymentTimeoutMsg={paymentTimeoutMsg}
           onRetryPayment={handleRetryPayment}
           onPaymentClick={handlePaymentClick}
           paidButtonText={`${PRICE_DISPLAY}원 결제하고 완성하기`}
-          paidButtonSubText="3회 포함"
+          paidButtonSubText={PAID_SUB_TEXT}
           isGenerating={isGenerating}
           onFreeGenerate={() => handleGenerate()}
-          freeButtonText="먼저 무료로 생성하기 (일 2회 제한)"
+          freeButtonText={freeLimitButtonText("resume")}
           generatingText="AI 자소서 생성 중..."
         />
 

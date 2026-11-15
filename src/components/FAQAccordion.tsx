@@ -1,20 +1,33 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
+import {
+  FREE_LIMITS,
+  PAID_GENERATIONS,
+} from "@/lib/policy";
 
-const faqs = [
+const faqs: { question: string; answer: ReactNode }[] = [
   {
     question: "AI가 작성한 티가 나지 않나요?",
-    answer: "STAR 기법과 직무별 키워드 매핑으로 자연스러운 경험 중심 문장을 만듭니다."
+    answer: "STAR 기법과 직무별 키워드 매핑으로 자연스러운 경험 중심 문장을 만듭니다.",
   },
   {
     question: "개인정보는 안전하게 보호되나요?",
-    answer: "자소서 원문은 1회성 토큰으로 처리되며 조회 즉시 서버에서 파기됩니다."
+    answer: (
+      <>
+        입력하신 내용은 AI 생성을 위해 Google 서버로 전송되며, 회사의 DB·Redis에는 저장하지 않습니다. 생성 결과를 면접 질문으로 이어가실 때만 임시 토큰으로 최대 10분간 보관되고 조회 즉시 삭제됩니다. 자세한 내용은{" "}
+        <a href="/privacy" className="text-blue-600 underline">개인정보처리방침</a>을 확인해 주세요.
+      </>
+    ),
+  },
+  {
+    question: "무료로 체험할 수 있나요?",
+    answer: `결제 없이도 자소서 생성은 일 ${FREE_LIMITS.resume}회, 면접 꼬리질문 생성은 일 ${FREE_LIMITS.interview}회까지 무료로 이용할 수 있습니다. (24시간 기준, 접속 IP별 제한)`,
   },
   {
     question: "결제 후 몇 번까지 생성할 수 있나요?",
-    answer: "1회 결제 시 3회 작성 및 재생성이 가능합니다."
-  }
+    answer: `1회 결제 시 ${PAID_GENERATIONS}회 작성 및 재생성이 가능합니다.`,
+  },
 ];
 
 export default function FAQAccordion() {

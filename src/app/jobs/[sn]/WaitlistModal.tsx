@@ -82,7 +82,7 @@ export default function WaitlistModal({
             <p className="text-sm text-gray-600 mb-4 leading-relaxed">
               <strong className="text-gray-900">[{instName}]</strong> 공고의 직무기술서와 STAR 프레임워크를 연계한 
               공공기관 전용 AI 자소서 자동 완성 기능이 곧 출시됩니다.
-              지금 대기자 등록을 하시면 <strong>오픈 알림과 무료 3회 생성 혜택</strong>을 드립니다.
+              지금 대기자 등록을 하시면 <strong>공고 오픈 알림</strong>을 보내드립니다.
             </p>
 
             <div className="bg-gray-50 rounded-xl p-3 mb-5 border border-gray-100 text-xs text-gray-700">

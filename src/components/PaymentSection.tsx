@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { PAID_BENEFIT_TEXT, PAID_SUB_TEXT, freeLimitButtonText } from "@/lib/policy";
 
 export interface PaymentSectionProps {
   priceDisplay?: string;
@@ -36,18 +37,18 @@ export default function PaymentSection({
   agreedToRefundPolicy,
   onAgreedChange,
   refundCheckboxId = "refund-agree",
-  guaranteeBenefitText = "STAR 기반 3회 생성/재생성 포함",
+  guaranteeBenefitText = PAID_BENEFIT_TEXT,
   error,
   paymentState,
   paymentTimeoutMsg,
   onRetryPayment,
   onPaymentClick,
   paidButtonText,
-  paidButtonSubText = "3회 포함",
+  paidButtonSubText = PAID_SUB_TEXT,
   processingText = "결제창을 준비하고 있습니다...",
   isGenerating,
   onFreeGenerate,
-  freeButtonText = "먼저 무료로 생성하기 (일 2회 제한)",
+  freeButtonText = freeLimitButtonText("resume"),
   generatingText = "AI 생성 진행 중...",
   generatingBannerText = "AI가 입력 경험을 바탕으로 맞춤 문장을 작성 중입니다 (보통 10~15초 소요)",
   widgetContainerId = "payment-widget",
