@@ -355,6 +355,19 @@ Vercel Serverless Function (maxDuration = 60,000ms)
 ]
 ```
 
-### 6-5. 네이버 서치어드바이저 메타태그
+### 6-5. 네이버 서치어드바이저 메타태그 및 프로덕션 배포 실측 검증
 
-- `src/app/layout.tsx` `metadata.verification.other["naver-site-verification"]` = `"db2fc7347a4bd68976c437508b13bbd79e4dbc16"` 반영 완료 (커밋 `84bccae`, 프로덕션 배포 후 HTML `<head>` 확인 대상).
+- `src/app/layout.tsx` `metadata.verification.other["naver-site-verification"]` = `"db2fc7347a4bd68976c437508b13bbd79e4dbc16"` 반영 완료 (커밋 `84bccae`).
+- 커밋 `66e0776` (`7058c6d`, `cefb1ef`, `c0fab6e` 포함) Vercel 프로덕션 배포 후 실운영 `https://korea-resume.com` 9개 엔드포인트 실측 응답(금칙어 `합격|한국도로공사|Korean Resume` 전수 0건):
+
+```text
+{"url":"https://korea-resume.com/","status":200,"bytes":31290,"matchedMarkers":["db2fc7347a4bd68976c437508b13bbd79e4dbc16","1문항 무료 미리보기","총 3회(미리보기 해제 1회 + 재생성 2회)","최초 생성 실패 시 자동 전액 환불, 면접 질문만 실패 시 무료 재시도","Korea Resume AI"],"missingMarkers":[],"foundForbidden":[],"naverMetaTag":"<meta name=\"naver-site-verification\" content=\"db2fc7347a4bd68976c437508b13bbd79e4dbc16\"/>"}
+{"url":"https://korea-resume.com/sample","status":200,"bytes":40018,"matchedMarkers":["OO공사","완성도 우수 구간(80점 이상)","[본인 수치 입력]","경영·회계·사무 (R600002)"],"missingMarkers":[],"foundForbidden":[]}
+{"url":"https://korea-resume.com/privacy","status":200,"bytes":33522,"matchedMarkers":["7,200"],"missingMarkers":[],"foundForbidden":[]}
+{"url":"https://korea-resume.com/refund","status":200,"bytes":14166,"matchedMarkers":["최초 생성 실패 시 자동 전액 환불, 면접 질문만 실패 시 무료 재시도"],"missingMarkers":[],"foundForbidden":[]}
+{"url":"https://korea-resume.com/about","status":200,"bytes":13519,"matchedMarkers":["Korea Resume AI"],"missingMarkers":[],"foundForbidden":[]}
+{"url":"https://korea-resume.com/terms","status":200,"bytes":14514,"matchedMarkers":["Korea Resume AI","총 3회(미리보기 해제 1회 + 재생성 2회)"],"missingMarkers":[],"foundForbidden":[]}
+{"url":"https://korea-resume.com/blog","status":200,"bytes":30437,"matchedMarkers":["서류·면접 실전 취업 가이드","서류 경쟁력을 높이는 자소서의 비밀, STAR 기법 완전 정복"],"missingMarkers":[],"foundForbidden":[]}
+{"url":"https://korea-resume.com/blog/cover-letter-no-spec-strategy","status":200,"bytes":19165,"matchedMarkers":["스펙이 없어도 돋보이는 자소서의 비밀"],"missingMarkers":[],"foundForbidden":[]}
+{"url":"https://korea-resume.com/sitemap.xml","status":200,"bytes":84646,"matchedMarkers":["https://korea-resume.com/sample"],"missingMarkers":[],"foundForbidden":[]}
+```
