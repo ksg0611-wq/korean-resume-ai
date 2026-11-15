@@ -32,13 +32,13 @@ export default function PrivacyPage() {
             <tbody>
               <tr>
                 <td className={td}>AI 생성 이용</td>
-                <td className={td}>이용자가 입력한 자기소개서·경험 메모 텍스트, 지원 직무명</td>
-                <td className={td}>AI 자기소개서 초안 및 면접 꼬리질문 생성</td>
+                <td className={td}>이용자가 입력한 자기소개서·경험 메모 텍스트, 모의면접 답변 텍스트, 지원 직무명</td>
+                <td className={td}>AI 자기소개서 초안·진단, 공공기관 모의면접 질문·답변 채점 및 일관성 검증·대비 노트 생성</td>
               </tr>
               <tr>
                 <td className={td}>유료 결제</td>
-                <td className={td}>주문번호, 결제 승인·환불 결과, 이메일 주소 (카드번호 등 결제수단 정보는 토스페이먼츠 결제창에서 직접 처리되며 회사는 수집·저장하지 않습니다)</td>
-                <td className={td}>결제 승인·자동 환불 처리, 이용권 관리, 생성 결과 재열람 링크 및 영수증 안내 발송</td>
+                <td className={td}>주문번호, 결제 상품·금액, 결제 승인·환불 결과, 이메일 주소 (카드번호 등 결제수단 정보는 토스페이먼츠 결제창에서 직접 처리되며 회사는 수집·저장하지 않습니다)</td>
+                <td className={td}>결제 승인·자동 환불 처리, 이용권 관리, 생성 결과 및 면접 세션 7일 재열람·이어하기 링크·영수증 안내 발송</td>
               </tr>
               <tr>
                 <td className={td}>무료 체험 제한</td>
@@ -70,17 +70,17 @@ export default function PrivacyPage() {
             </thead>
             <tbody>
               <tr>
-                <td className={td}>자기소개서·경험 입력 원문 (진단 모드 포함)</td>
-                <td className={td}>회사 DB·Redis에 저장하지 않음 (진단 원문은 이용자 브라우저 로컬에만 임시 보관 후 완성본 생성 시 즉시 폐기)</td>
-                <td className={td}>생성·진단 요청을 처리하는 동안에만 서버 메모리에서 처리하며 요청 처리 즉시 폐기합니다 (미저장).</td>
+                <td className={td}>자기소개서·경험 입력 원문 (자소서 진단·생성 모드)</td>
+                <td className={td}>자소서 서비스 DB·Redis에 영구 저장하지 않음 (진단 원문은 이용자 브라우저 로컬에만 임시 보관 후 완성본 생성 시 즉시 폐기)</td>
+                <td className={td}>자소서 생성·진단 요청을 처리하는 동안에만 서버 메모리에서 처리하며 요청 처리 즉시 폐기합니다 (미저장).</td>
               </tr>
               <tr>
-                <td className={td}>AI 생성 결과물 및 미리보기 토큰</td>
-                <td className={td}>무료 미리보기(preview:*) 임시 보관 / 유료 결제 결과(result:*) Redis 임시 저장</td>
+                <td className={td}>AI 생성 결과물·미리보기 및 면접 시뮬레이터 세션 (interview_session:*)</td>
+                <td className={td}>무료 미리보기(preview:*)·무료 면접 세션(interview_session:*) / 유료 결제 결과·면접 대비 노트(result:*) 및 유료 면접 세션 Redis 임시 저장</td>
                 <td className={td}>
-                  무료 자소서 미리보기 데이터(preview:*, order_preview:*)는 결제 후 잠금 해제를 위해 Redis에{" "}
-                  <strong>최대 2시간(7,200초) 보관 후 1회 사용 또는 만료 시 자동 파기</strong>됩니다. 유료 결제 결과물은 재열람 링크 제공을 위해{" "}
-                  <strong>생성일로부터 7일(604,800초)</strong>간 보관 후 자동 파기되며, 면접 꼬리질문 임시 토큰은 최대 10분 보관 후 조회 즉시 삭제됩니다.
+                  무료 자소서 미리보기 데이터(preview:*, order_preview:*)와 무료 면접 시뮬레이터 세션(interview_session:*)은{" "}
+                  <strong>최대 2시간(7,200초) 보관 후 만료 시 자동 파기</strong>됩니다. 유료 자소서·면접 대비 노트(result:*) 및 유료 면접 세션(일관성 검사·꼬리질문 이어하기를 위한 입력 자소서·답변 맥락 포함)은{" "}
+                  <strong>최초 생성일로부터 7일(604,800초)</strong>간 보관되어 재열람 및 이어하기에 활용된 뒤 만료 시 자동 파기되며, 자소서 화면에서 면접으로 이어갈 때의 임시 전달 토큰은 최대 10분 보관 후 조회 즉시 삭제됩니다.
                 </td>
               </tr>
               <tr>
@@ -124,9 +124,9 @@ export default function PrivacyPage() {
               <tr><th className={th}>수탁자(이전받는 자)</th><td className={td}>Google LLC (Gemini API)</td></tr>
               <tr><th className={th}>이전 국가</th><td className={td}>미국</td></tr>
               <tr><th className={th}>이전 일시 및 방법</th><td className={td}>이용자가 &quot;생성&quot;을 요청하는 시점에 암호화된 네트워크(HTTPS)를 통해 전송</td></tr>
-              <tr><th className={th}>이전 항목</th><td className={td}>이용자가 입력한 자기소개서 텍스트(및 지원 직무명)</td></tr>
-              <tr><th className={th}>이용 목적</th><td className={td}>AI 문장 생성</td></tr>
-              <tr><th className={th}>보유·이용 기간</th><td className={td}>생성 즉시 처리하며 회사는 저장하지 않습니다. 입력 데이터는 Google의 유료 API 정책에 따라 모델 학습에 사용되지 않습니다. (그 밖의 처리 정책은 Google의 API 약관 및 개인정보처리방침에 따릅니다.)</td></tr>
+              <tr><th className={th}>이전 항목</th><td className={td}>이용자가 입력한 자기소개서 텍스트, 모의면접 답변 텍스트(및 지원 직무명)</td></tr>
+              <tr><th className={th}>이용 목적</th><td className={td}>AI 문장 생성, 면접 질문·답변 루브릭 채점 및 꼬리질문 생성</td></tr>
+              <tr><th className={th}>보유·이용 기간</th><td className={td}>AI 생성·채점 요청 처리 목적으로 전송되며 Google의 유료 API 정책에 따라 입력 데이터는 모델 학습에 사용되지 않습니다. (세션 이어하기용 Redis 임시 보관은 위 기간 만료 후 자동 파기되며, 그 밖의 처리 정책은 Google의 API 약관 및 개인정보처리방침에 따릅니다.)</td></tr>
               <tr><th className={th}>이전 거부 방법 및 효과</th><td className={td}>이용자는 생성 기능을 사용하지 않음으로써 국외 이전을 거부할 수 있으며, 이 경우 AI 생성 기능은 이용할 수 없습니다. 문의: {b.email}</td></tr>
             </tbody>
           </table>

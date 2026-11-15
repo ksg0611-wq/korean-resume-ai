@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { verifyAndGetStoredResult, buildResultUrl } from "@/lib/results";
+import { getInterviewSession } from "@/lib/interviewSession";
 import { BUSINESS_INFO } from "@/lib/siteConfig";
 import ResultViewClient from "./ResultViewClient";
 
@@ -42,6 +43,21 @@ export default async function ResultPage({
   }
 
   const { order, result } = outcome;
+  const activeSessionId =
+    order.activeSessionId || result.interviewSessionId || null;
+
+  let remainingEvaluations =
+    result.interviewNote?.remainingEvaluations ?? null;
+  let maxEvaluations = result.interviewNote?.maxEvaluations ?? null;
+
+  if (result.serviceType === "interview" && activeSessionId) {
+    const liveSession = await getInterviewSession(activeSessionId);
+    if (liveSession) {
+      remainingEvaluations = liveSession.remainingEvaluations;
+      maxEvaluations = liveSession.maxEvaluations;
+    }
+  }
+
   return (
     <ResultViewClient
       orderId={result.orderId}
@@ -51,6 +67,10 @@ export default async function ResultPage({
       items={result.items ?? null}
       interviewQuestions={result.interviewQuestions ?? null}
       interviewPending={Boolean(result.interviewPending)}
+      interviewSessionId={activeSessionId}
+      interviewNote={result.interviewNote ?? null}
+      remainingEvaluations={remainingEvaluations}
+      maxEvaluations={maxEvaluations}
       resultToken={result.token}
       createdAt={result.createdAt}
       expiresAt={result.expiresAt}
