@@ -48,6 +48,10 @@ export default async function ResultPage({
       serviceType={result.serviceType}
       title={result.title}
       text={result.text}
+      items={result.items ?? null}
+      interviewQuestions={result.interviewQuestions ?? null}
+      interviewPending={Boolean(result.interviewPending)}
+      resultToken={result.token}
       createdAt={result.createdAt}
       expiresAt={result.expiresAt}
       receiptUrl={result.receiptUrl ?? order.receiptUrl ?? null}

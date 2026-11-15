@@ -36,6 +36,7 @@ export interface PaymentSectionProps {
   widgetContainerId?: string;
   agreementContainerId?: string;
   kakaoChannelUrl?: string | null;
+  comparisonTable?: React.ReactNode;
 }
 
 export default function PaymentSection({
@@ -70,6 +71,7 @@ export default function PaymentSection({
   widgetContainerId = "payment-widget",
   agreementContainerId = "agreement",
   kakaoChannelUrl,
+  comparisonTable,
 }: PaymentSectionProps) {
   const displayTitle = title || `결제 및 생성 (${priceDisplay}원)`;
   const displayPaidText = paidButtonText || `${priceDisplay}원 결제하고 완성하기`;
@@ -268,6 +270,9 @@ export default function PaymentSection({
           </div>
         </div>
       )}
+
+      {/* 패키지 구성 비교표 (결제 버튼 바로 위) */}
+      {comparisonTable && <div>{comparisonTable}</div>}
 
       {/* 국외 이전(Google) 고지 */}
       <p className="text-[11px] sm:text-xs text-gray-500 text-center break-keep">
