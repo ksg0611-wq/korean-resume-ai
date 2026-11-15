@@ -1,23 +1,16 @@
 import { NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { Ratelimit } from "@upstash/ratelimit";
-import { Redis } from "@upstash/redis";
 import { GEMINI_CONFIG, generateContentWithFallback } from "@/lib/gemini";
+import { checkFreeRateLimit, requireRedisClient } from "@/lib/redis";
 
 // Vercel Serverless Function Execution Timeout (방어적 60초 설정)
 export const maxDuration = 60;
 
 // ── Environment Variables Check ──
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
-const KV_REST_API_URL = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL || "";
-const KV_REST_API_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN || "";
 
 if (!GEMINI_API_KEY) {
   console.warn("GEMINI_API_KEY is not set.");
-}
-
-if (!KV_REST_API_URL || !KV_REST_API_TOKEN) {
-  console.warn("KV Environment variables are missing.");
 }
 
 // ── Google Gemini Setup ──
@@ -41,33 +34,26 @@ export async function POST(req: Request) {
       );
     }
 
-    // ── Upstash Redis Client ──
-    const redis = new Redis({
-      url: KV_REST_API_URL,
-      token: KV_REST_API_TOKEN,
-    });
-
-    const ratelimit = new Ratelimit({
-      redis,
-      limiter: Ratelimit.slidingWindow(1, "24 h"),
-    });
-
     // ── IP Parsing ──
     const ip = (req.headers.get("x-forwarded-for") ?? "127.0.0.1").split(",")[0].trim();
 
     // ── Rate Limiting / Payment Validation ──
     if (isFree) {
-      // Free tier: slidingWindow 1 req / 24h per IP
-      // Using today's date pattern to match user requirement strictly if needed, but sliding window handles the 24h limit well.
-      const { success } = await ratelimit.limit(`ratelimit:interview:ip:${ip}`);
-      if (!success) {
+      // Free tier: slidingWindow 1 req / 24h per IP (Redis 장애 시 안전 폴백)
+      const allowed = await checkFreeRateLimit({
+        key: `ratelimit:interview:ip:${ip}`,
+        maxRequests: 1,
+        window: "24 h",
+      });
+      if (!allowed) {
         return NextResponse.json(
           { error: "Too Many Requests. Free tier limit exceeded (1 per 24h)." },
           { status: 429 }
         );
       }
     } else {
-      // Paid tier: validate orderId against Redis
+      // Paid tier: strictly require Redis & validate orderId
+      const redis = requireRedisClient();
       const orderKey = `order:interview:${orderId}`;
       const orderData: any = await redis.get(orderKey);
 

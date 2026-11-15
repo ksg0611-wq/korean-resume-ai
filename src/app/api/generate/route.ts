@@ -1,27 +1,16 @@
 import { NextResponse } from "next/server";
-import { Redis } from "@upstash/redis";
-import { Ratelimit } from "@upstash/ratelimit";
+import type { Redis } from "@upstash/redis";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { GEMINI_CONFIG, generateContentWithFallback } from "@/lib/gemini";
+import { checkFreeRateLimit, requireRedisClient } from "@/lib/redis";
 
 // Vercel Serverless Function Execution Timeout (방어적 60초 설정)
 export const maxDuration = 60;
 
 export async function POST(req: Request) {
-  // Initialize Redis inside function to ensure env vars are loaded at runtime
-  const redis = new Redis({
-    url: process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL || "https://dummy-url.upstash.io",
-    token: process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN || "dummy-token",
-  });
-
-  // Initialize Rate Limiter: max 2 requests per 24 hours per IP (slidingWindow)
-  const ratelimit = new Ratelimit({
-    redis: redis,
-    limiter: Ratelimit.slidingWindow(2, "24 h"),
-  });
-
   // Initialize Gemini
   const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "dummy-api-key");
+  let redis: Redis | null = null;
 
   try {
     const body = await req.json();
@@ -60,16 +49,21 @@ export async function POST(req: Request) {
 
     // ── Rate Limiting / Payment Validation ──
     if (isFree) {
-      // Free tier: slidingWindow 3 req / 24h per IP
-      const { success } = await ratelimit.limit(`ratelimit_free_${ip}`);
-      if (!success) {
+      // Free tier: slidingWindow 2 req / 24h per IP (Redis 장애 시 안전 폴백)
+      const allowed = await checkFreeRateLimit({
+        key: `ratelimit_free_${ip}`,
+        maxRequests: 2,
+        window: "24 h",
+      });
+      if (!allowed) {
         return NextResponse.json(
           { error: "Too Many Requests. Free tier limit exceeded (2 per 24h)." },
           { status: 429 }
         );
       }
     } else {
-      // Paid tier: validate orderId against Redis
+      // Paid tier: strictly require Redis & validate orderId
+      redis = requireRedisClient();
       const orderData: any = await redis.get(`order:${orderId}`);
 
       if (
@@ -108,7 +102,7 @@ export async function POST(req: Request) {
     const responseText = genResult.text;
 
     // ── Deduct generation count (paid requests only) ──
-    if (!isFree && orderId) {
+    if (!isFree && orderId && redis) {
       const orderData: any = await redis.get(`order:${orderId}`);
       if (orderData && orderData.remainingGenerations > 0) {
         await redis.set(`order:${orderId}`, {
