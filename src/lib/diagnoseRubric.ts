@@ -294,16 +294,24 @@ export function buildDiagnosticReport(
     },
   ];
 
-  // 약점 목록 정렬 (high 우선)
-  const weaknesses: WeaknessItem[] = (aiEval.weaknesses || []).map((w, idx) => ({
-    id: `wk-${idx + 1}`,
-    categoryKey: w.categoryKey || "general",
-    title: w.title,
-    severity: w.severity === "high" ? "high" : "medium",
-    description: w.description,
-  }));
+  // 약점 목록 생성 (블라인드 세부 위치 유출 차단을 위해 AI가 생성한 블라인드 중복/위치 설명은 서버에서 필터링)
+  const BLIND_LEAK_HINT_RE = /블라인드|학력|학교명|대학명|가족\s*직업|출신지|출신\s*지역/i;
+  const weaknesses: WeaknessItem[] = (aiEval.weaknesses || [])
+    .filter((w) => {
+      const cat = String(w.categoryKey || "").toLowerCase();
+      if (cat.includes("blind")) return false;
+      if (BLIND_LEAK_HINT_RE.test(String(w.title || ""))) return false;
+      return true;
+    })
+    .map((w, idx) => ({
+      id: `wk-${idx + 1}`,
+      categoryKey: w.categoryKey || "general",
+      title: w.title,
+      severity: w.severity === "high" ? "high" : "medium",
+      description: w.description,
+    }));
 
-  // 블라인드 위반이 있는 경우 최우선 약점으로 자동 보강
+  // 블라인드 위반이 있는 경우 최우선 약점으로 자동 보강 (특정 단어/위치는 비공개)
   if (!blindCheck.clean) {
     weaknesses.unshift({
       id: "wk-blind",
@@ -311,7 +319,7 @@ export function buildDiagnosticReport(
       title: `블라인드 채용 위반 의심 표현 ${blindCheck.totalViolations}건 발견`,
       severity: "high",
       description:
-        "학교명, 출신지 또는 가족 관련 키워드가 포함되어 있어 서류 전형 감점 또는 결격 사유가 될 수 있습니다.",
+        "규정 위반 의심 표현이 포함되어 있어 서류 전형 감점 또는 결격 사유가 될 수 있습니다. 정확한 위반 위치와 대체 표현은 완성본에서 안전하게 교정됩니다.",
     });
   }
 

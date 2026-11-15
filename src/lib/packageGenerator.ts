@@ -97,13 +97,17 @@ const DIAGNOSIS_RESPONSE_SCHEMA: Schema = {
     alignment: {
       type: SchemaType.OBJECT,
       properties: {
-        score: {
+        jobFit: {
           type: SchemaType.INTEGER,
-          description: "6, 11, 16, 20 중 하나의 앵커 점수만 선택",
+          description: "3, 5, 7, 9, 10 중 하나의 앵커 점수만 선택",
+        },
+        questionFocus: {
+          type: SchemaType.INTEGER,
+          description: "3, 5, 7, 9, 10 중 하나의 앵커 점수만 선택",
         },
         feedback: { type: SchemaType.STRING },
       },
-      required: ["score", "feedback"],
+      required: ["jobFit", "questionFocus", "feedback"],
     },
     weaknesses: {
       type: SchemaType.ARRAY,
@@ -175,26 +179,35 @@ export async function evaluateDiagnosisWithAI(options: {
 아래 자기소개서 원문을 공정하고 일관된 이산 앵커 기준표(Discrete Rubric Anchors)에 따라 채점하고 JSON으로만 응답하세요.
 반드시 동일한 자소서에는 항상 동일한 앵커 등급이 나오도록 보수적·객관적으로 채점합니다.
 
-[고정 채점 앵커 기준표]
+[고정 채점 앵커 기준표 — 반드시 아래 관찰 가능한 객관적 기준에만 근거하여 동일한 입력에 항상 동일한 앵커를 선택하세요]
 1. STAR 구조 (각 항목은 반드시 지정된 정수 중 하나만 선택):
-- s (상황 Situation): 0(상황 없음), 2(단편적 언급), 4(상황 제시되나 배경·시점 미흡), 6(언제·어디서·어떤 문제 상황인지 선명함)
-- t (과제 Task): 0(목표·과제 없음), 2(팀 전체 목표만 언급), 4(과제 제시되나 우선순위·난점 약함), 6(해결할 핵심 과제와 요구 수준이 명확함)
-- a (행동 Action): 0(행동 없음), 3("최선을 다했다/노력했다" 식 추상 서술), 5(실행 목록은 있으나 왜 그 방법을 택했는지 판단 근거 부족), 7(본인의 문제 해결 판단 근거와 단계별 실행이 구체적)
-- r (결과 Result): 0(결과 없음), 2("많이 배웠다" 식 감상만 있음), 4(정성적 개선 결과만 제시), 6(검증 가능한 구체 성과와 직무 적용점 연결)
+- s (상황 Situation): 0(배경·시점 전무), 2(장소·모임명 등 단어만 언급), 4(시기·배경은 있으나 해결해야 할 문제 상황 불명확), 6(언제·어디서·어떤 문제/병목 상황인지 문장으로 선명함)
+- t (과제 Task): 0(목표·과제 언급 없음), 2(단순 참여/팀 목표만 언급), 4(해결 과제는 보이나 제약 조건·달성 기준 약함), 6(본인이 해결해야 할 핵심 과제와 요구 수준이 명확함)
+- a (행동 Action): 0(행동 없음), 3("최선을 다했다/열심히 했다" 식 추상 서술만 있음), 5(구체 행동 1~2가지는 있으나 왜 그 방법을 택했는지 판단 근거 부족), 7(문제 원인 진단부터 대안 선택 근거와 단계별 실행이 구체적)
+- r (결과 Result): 0(결과 없음), 2("많이 배웠다/보람찼다" 식 감상만 있음), 4(개선 사실은 있으나 객관적 근거 또는 직무 적용점 중 1개 누락), 6(검증 가능한 성과와 입사 후 직무 적용점이 모두 명시됨)
 
 2. 수치·역할 구체성 (반드시 지정된 정수 중 하나만 선택):
-- roleScore (본인 고유 역할): 0(팀에 매몰되어 본인 역할 불명확), 3(단순 보조 수행), 5(담당 파트는 보이나 주도성 약함), 8(본인 고유 의사결정·주도적 기여 범위가 명확)
-- specificityScore (근거 구체성): 0(사례·수치 전무), 2(기간·인원 등 기초 사실만 있음), 4(일부 과정·결과 언급되나 전후 비교 부족), 7(Before→After 변화 및 재현 가능한 직무 방식 입증)
+- roleScore (본인 고유 역할): 0("함께/우리가" 위주여서 본인 역할 불분명), 3(단순 보조·참여 수준), 5(본인 담당 파트 1개는 보이나 주도적 설계는 약함), 8(본인이 직접 기획·조율·의사결정한 고유 기여 범위가 명확)
+- specificityScore (근거 구체성): 0(구체 사례·수치 전무), 2(기간·인원 등 기초 사실 1건 수준), 4(실행 과정과 변화가 있으나 전후 비교 근거 부족), 7(Before→After 변화 또는 복수의 정량·정성 근거로 재현 가능한 방식 입증)
 
-3. 문항 적합성 alignment.score (6, 11, 16, 20 중 하나만 선택):
-- 6: 어디에나 붙일 수 있는 범용 자기소개 수준
-- 11: 경험은 있으나 지원 직무·문항 핵심 의도와 연결이 느슨함
-- 16: 지원 직무 핵심 역량과 문항 의도를 적절히 충족함
-- 20: 지원 기관/직무 특성·핵심 역량과 정밀하게 부합함
+3. 문항·직무 적합성 alignment (각 항목 반드시 지정된 정수 중 하나만 선택):
+- jobFit (직무 역량 부합도 — 3, 5, 7, 9, 10 중 선택):
+  3: 직무와 무관한 일상 감상 수준
+  5: 일반 경험이나 지원 직무 키워드·연결이 단편적
+  7: 지원 직무와 유관한 경험(실습/프로젝트)과 기본 역량이 제시됨
+  9: 지원 직무의 핵심 업무 프로세스·실무 역량과 직접 부합함
+  10: 지원 기관/직무 특성·요구 역량과 정밀하게 일치하고 입사 후 활용이 선명함
+- questionFocus (문항 질문 응답 충실도 — 3, 5, 7, 9, 10 중 선택):
+  3: 문항이 묻는 질문에 대한 핵심 답변이 누락됨
+  5: 질문과 일부 관련되나 나열식 서술로 초점이 분산됨
+  7: 문항 의도에 맞는 단일 핵심 경험을 중심으로 구조화됨
+  9: 문항이 요구하는 요소(문제원인-해결과정-성과 또는 지원동기)를 충실히 충족함
+  10: 문항의 모든 세부 요구 조건에 군더더기 없이 정면으로 답변함
 
 [약점(weaknesses) 및 수정 예시(sampleFix) 규칙]
 - weaknesses는 가장 치명적인 순으로 4~5건을 작성하세요 (severity는 "high" 또는 "medium").
-- sampleFix는 원문에서 가장 개선 효과가 큰 문장 1~2개를 beforeExcerpt에 그대로 발췌하고, afterExample에서 설득력 있는 합격 문장으로 개선하세요. 단, 원문에 없는 숫자·성과를 지어내지 말고 수치가 빠진 자리는 "[본인 수치 입력]"으로 표기하세요.
+- 블라인드 위반 여부·단어 위치는 서버 규칙 엔진이 별도로 잠금 처리하므로 weaknesses와 sampleFix에 출신 학교명·가족·출신지 등 블라인드 위반 단어나 위치를 절대 인용하거나 언급하지 마세요. 오직 STAR 구조, 수치·역할 구체성, 직무/문항 적합성, 문장 설득력 약점만 작성하세요.
+- sampleFix는 원문에서 블라인드 정보와 무관한 일반 경험 문장 1~2개를 beforeExcerpt에 그대로 발췌하고, afterExample에서 설득력 있는 합격 문장으로 개선하세요. 단, 원문에 없는 숫자·성과를 지어내지 말고 수치가 빠진 자리는 "[본인 수치 입력]"으로 표기하세요.
 
 [참고 규칙 기반 사전 측정]
 - 공백 포함 글자수: ${detMetrics.charCount}자 (목표 ${targetChars}자)
@@ -214,7 +227,7 @@ ${text.trim()}`;
     GEMINI_CONFIG.PRIMARY_MODEL,
     "low",
     {
-      temperature: 0.1,
+      temperature: 0,
       responseMimeType: "application/json",
       responseSchema: DIAGNOSIS_RESPONSE_SCHEMA,
       perAttemptTimeoutMs: 20_000,
@@ -222,7 +235,22 @@ ${text.trim()}`;
     }
   );
 
-  const raw = JSON.parse(stripMarkdownFences(genResult.text)) as Partial<AIAnchorEvaluation>;
+  type RawDiagnosisPayload = Omit<Partial<AIAnchorEvaluation>, "alignment"> & {
+    alignment?: {
+      jobFit?: unknown;
+      questionFocus?: unknown;
+      score?: unknown;
+      feedback?: string;
+    };
+  };
+  const raw = JSON.parse(stripMarkdownFences(genResult.text)) as RawDiagnosisPayload;
+
+  const jobFit = snapToAnchor(raw.alignment?.jobFit, [3, 5, 7, 9, 10]);
+  const questionFocus = snapToAnchor(raw.alignment?.questionFocus, [3, 5, 7, 9, 10]);
+  const alignmentScore =
+    raw.alignment?.jobFit !== undefined || raw.alignment?.questionFocus !== undefined
+      ? jobFit + questionFocus
+      : snapToAnchor(raw.alignment?.score, [6, 10, 14, 17, 20]);
 
   const evaluation: AIAnchorEvaluation = {
     star: {
@@ -244,7 +272,7 @@ ${text.trim()}`;
           : "지원자 본인의 고유 역할과 정량적 기여 근거를 검토했습니다.",
     },
     alignment: {
-      score: snapToAnchor(raw.alignment?.score, [6, 11, 16, 20]),
+      score: alignmentScore,
       feedback:
         typeof raw.alignment?.feedback === "string" && raw.alignment.feedback.trim()
           ? raw.alignment.feedback.trim()
@@ -442,20 +470,20 @@ ${resumeContext.trim()}
    - 6~7번: 협업 · 갈등 해결 검증
    - 8~9번: 공직윤리 / 규정 준수 / 딜레마 상황대처
    - 10번: 입사 후 포부 · 3분 내 마지막 한마디 검증
-3. 각 항목은 반드시 다음 필드를 구체적으로 포함하세요:
+3. 각 항목은 반드시 다음 필드를 간결하고 명확하게 포함하세요 (각 필드는 핵심 1문장 40~80자 이내):
    - question: 지원자 실제 경험 맥락을 겨냥한 날카로운 질문
-   - intent: 면접관이 이 질문으로 검증하려는 핵심 평가 기준 (1~2문장)
-   - answerTip: 고득점 답변 구조(두괄식 핵심 + 근거 연결 팁 2문장)
+   - intent: 면접관이 이 질문으로 검증하려는 핵심 평가 기준 (1문장)
+   - answerTip: 고득점 답변 구조(두괄식 핵심 + 근거 연결 팁 1문장)
 4. 블라인드 면접 규칙상 출신 학교·가족·신상을 묻는 질문은 절대 생성하지 마세요.`;
 
   const genResult = await generateContentWithFallback(
     genAI,
     prompt,
     GEMINI_CONFIG.PRIMARY_MODEL,
-    GEMINI_CONFIG.THINKING_LEVEL,
+    "low",
     {
-      perAttemptTimeoutMs: 22_000,
-      totalBudgetMs: 40_000,
+      perAttemptTimeoutMs: 28_000,
+      totalBudgetMs: 48_000,
       responseMimeType: "application/json",
       responseSchema: INTERVIEW_10_RESPONSE_SCHEMA,
     }
