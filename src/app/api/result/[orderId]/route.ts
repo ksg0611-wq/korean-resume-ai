@@ -1,8 +1,14 @@
 import { NextResponse } from "next/server";
 import { verifyAndGetStoredResult } from "@/lib/results";
-import { reportServerError } from "@/lib/alerts";
+import { reportServerError, sanitizeErrorText } from "@/lib/alerts";
 
 export const dynamic = "force-dynamic";
+
+const RESULT_API_SECURITY_HEADERS = {
+  "Referrer-Policy": "no-referrer",
+  "Cache-Control": "private, no-store",
+  "X-Robots-Tag": "noindex, nofollow",
+} as const;
 
 export async function GET(
   req: Request,
@@ -25,7 +31,7 @@ export async function GET(
         },
         {
           status: 403,
-          headers: { "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow" },
+          headers: RESULT_API_SECURITY_HEADERS,
         }
       );
     }
@@ -40,7 +46,7 @@ export async function GET(
         },
         {
           status: 410,
-          headers: { "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow" },
+          headers: RESULT_API_SECURITY_HEADERS,
         }
       );
     }
@@ -54,8 +60,7 @@ export async function GET(
         headers: {
           "Content-Type": "text/plain; charset=utf-8",
           "Content-Disposition": `attachment; filename="${safeFilename}"`,
-          "Cache-Control": "no-store",
-          "X-Robots-Tag": "noindex, nofollow",
+          ...RESULT_API_SECURITY_HEADERS,
         },
       });
     }
@@ -74,11 +79,11 @@ export async function GET(
       },
       {
         status: 200,
-        headers: { "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow" },
+        headers: RESULT_API_SECURITY_HEADERS,
       }
     );
   } catch (error) {
-    console.error("[GET /api/result/[orderId]] Error:", error);
+    console.error("[GET /api/result/[orderId]] Error:", sanitizeErrorText(error));
     await reportServerError({
       route: "/api/result/[orderId]",
       statusCode: 500,
@@ -87,7 +92,10 @@ export async function GET(
     });
     return NextResponse.json(
       { error: "Internal Server Error" },
-      { status: 500 }
+      {
+        status: 500,
+        headers: RESULT_API_SECURITY_HEADERS,
+      }
     );
   }
 }

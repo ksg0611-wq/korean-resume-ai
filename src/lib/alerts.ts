@@ -38,6 +38,8 @@ export function sanitizeErrorText(input: unknown): string {
     .replace(/postgres:\/\/([^:]+):([^@]+)@/gi, "postgres://$1:****@")
     .replace(/(Bearer|Basic)\s+[A-Za-z0-9\-._~+/]+=*/gi, "$1 ****")
     .replace(/([?&](?:key|apiKey|token|serviceKey|secret)=)[^&\s]+/gi, "$1****")
+    .replace(/(x-result-token\s*[:=]\s*)[^\s,;]+/gi, "$1[REDACTED_TOKEN]")
+    .replace(/("(?:x-result-token|resultToken|resultUrl)"\s*:\s*")[^"]+(")/gi, "$1[REDACTED]$2")
     .replace(/\b(?:AIza[0-9A-Za-z\-_]{20,}|re_[0-9A-Za-z_]{16,}|(?:test|live)_(?:sk|gsk|ck|gck)_[0-9A-Za-z_]{10,})\b/g, "[REDACTED_KEY]")
     .replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, "[REDACTED_EMAIL]");
 

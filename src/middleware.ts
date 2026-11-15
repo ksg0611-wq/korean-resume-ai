@@ -1,6 +1,14 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { sanitizeErrorText } from "@/lib/alerts";
 import { verifyAndGetStoredResult } from "@/lib/results";
 import { BUSINESS_INFO } from "@/lib/siteConfig";
+
+const RESULT_HTML_SECURITY_HEADERS = {
+  "Content-Type": "text/html; charset=utf-8",
+  "Referrer-Policy": "no-referrer",
+  "Cache-Control": "private, no-store",
+  "X-Robots-Tag": "noindex, nofollow",
+} as const;
 
 function buildStatusHtml(options: {
   status: 403 | 410 | 500;
@@ -55,11 +63,7 @@ export async function middleware(req: NextRequest) {
       }),
       {
         status: 403,
-        headers: {
-          "Content-Type": "text/html; charset=utf-8",
-          "Cache-Control": "no-store",
-          "X-Robots-Tag": "noindex, nofollow",
-        },
+        headers: RESULT_HTML_SECURITY_HEADERS,
       }
     );
   }
@@ -79,11 +83,7 @@ export async function middleware(req: NextRequest) {
         }),
         {
           status: 403,
-          headers: {
-            "Content-Type": "text/html; charset=utf-8",
-            "Cache-Control": "no-store",
-            "X-Robots-Tag": "noindex, nofollow",
-          },
+          headers: RESULT_HTML_SECURITY_HEADERS,
         }
       );
     }
@@ -98,18 +98,18 @@ export async function middleware(req: NextRequest) {
         }),
         {
           status: 410,
-          headers: {
-            "Content-Type": "text/html; charset=utf-8",
-            "Cache-Control": "no-store",
-            "X-Robots-Tag": "noindex, nofollow",
-          },
+          headers: RESULT_HTML_SECURITY_HEADERS,
         }
       );
     }
 
-    return NextResponse.next();
+    const response = NextResponse.next();
+    response.headers.set("Referrer-Policy", "no-referrer");
+    response.headers.set("Cache-Control", "private, no-store");
+    response.headers.set("X-Robots-Tag", "noindex, nofollow");
+    return response;
   } catch (error) {
-    console.error("[Middleware /result] Error checking token:", error);
+    console.error("[Middleware /result] Error checking token:", sanitizeErrorText(error));
     return new NextResponse(
       buildStatusHtml({
         status: 500,
@@ -119,11 +119,7 @@ export async function middleware(req: NextRequest) {
       }),
       {
         status: 500,
-        headers: {
-          "Content-Type": "text/html; charset=utf-8",
-          "Cache-Control": "no-store",
-          "X-Robots-Tag": "noindex, nofollow",
-        },
+        headers: RESULT_HTML_SECURITY_HEADERS,
       }
     );
   }
