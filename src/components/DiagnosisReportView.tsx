@@ -1,4 +1,5 @@
 import type { FreeDiagnosticResponse } from "@/lib/diagnoseRubric";
+import { PAID_GENERATIONS_BREAKDOWN } from "@/lib/policy";
 
 interface DiagnosisReportViewProps {
   report: FreeDiagnosticResponse;
@@ -40,7 +41,7 @@ export default function DiagnosisReportView({
             </span>
           </div>
           <h3 className="text-xl sm:text-2xl font-extrabold text-gray-900">
-            종합 합격 적합도{" "}
+            자소서 완성도 진단{" "}
             <span className="text-blue-600">{report.totalScore}점</span>{" "}
             <span className="text-sm font-medium text-gray-400">/ 100점</span>
           </h3>
@@ -215,7 +216,7 @@ export default function DiagnosisReportView({
           </div>
           <div className="p-3.5 rounded-xl bg-emerald-50/70 border border-emerald-200 space-y-1">
             <span className="text-[11px] font-extrabold text-emerald-700">
-              After (합격 구조 교정안)
+              After (STAR 구조 교정안)
             </span>
             <p className="text-gray-900 font-medium leading-relaxed break-keep">
               {report.sampleFix.afterExample}
@@ -234,7 +235,7 @@ export default function DiagnosisReportView({
             위 {report.totalWeaknessCount}가지 약점을 모두 고친 4문항 완성본 + 면접 질문 10선 받기
           </p>
           <p className="text-xs text-blue-100">
-            원문 사실관계는 그대로 유지하고 블라인드·STAR·구체성을 한 번에 교정해 드립니다 (총 3회 생성 가능).
+            원문 사실관계는 그대로 유지하고 블라인드·STAR·구체성을 한 번에 교정해 드립니다 ({PAID_GENERATIONS_BREAKDOWN}).
           </p>
         </div>
         <button

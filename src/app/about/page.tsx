@@ -14,7 +14,7 @@ export default function AboutPage() {
     <PolicyShell title="서비스 소개">
       <PolicySection heading="Korea Resume AI">
         <p>
-          <strong>Korean Resume AI</strong>는 STAR 프레임워크와 AI 기술을 결합하여 취업 준비생들의 자기소개서 및 면접 준비를 돕는 서비스입니다.
+          <strong>Korea Resume AI</strong>는 STAR 프레임워크와 AI 기술을 결합하여 취업 준비생들의 자기소개서 및 면접 준비를 돕는 서비스입니다.
         </p>
         <p>
           본 서비스는 개인 개발 프로젝트로 운영되며, 최상의 결과물을 제공하기 위해 지속적으로 모델과 프롬프트를 개선하고 있습니다.

@@ -21,6 +21,7 @@ import {
   FREE_LIMITS,
   PAID_BENEFIT_TEXT,
   PAID_GENERATIONS,
+  PAID_GENERATIONS_BREAKDOWN,
   PAID_SUB_TEXT,
   freeLimitButtonText,
   freeLimitExceededMessage,
@@ -810,7 +811,7 @@ export default function Home({ kakaoChannelUrl }: { kakaoChannelUrl?: string | n
                 <svg className="w-4 h-4 text-emerald-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
                 </svg>
-                <span>{`1회 결제 · ${PAID_GENERATIONS}회 생성/재생성 + 7일 재열람 링크 포함`}</span>
+                <span>{`1회 결제 · ${PAID_GENERATIONS_BREAKDOWN} + 7일 재열람 링크 포함`}</span>
               </div>
             </div>
 
@@ -829,7 +830,7 @@ export default function Home({ kakaoChannelUrl }: { kakaoChannelUrl?: string | n
                 href="/sample"
                 className="text-xs sm:text-sm text-blue-600 hover:text-blue-800 underline font-semibold text-center py-1 transition-colors"
               >
-                실제 합격 수준 진단 리포트 · 4문항 · 면접 10선 샘플 먼저 보기 ↗
+                실제 완성도 진단 리포트 · 4문항 · 면접 10선 샘플 먼저 보기 ↗
               </Link>
             </div>
 
@@ -940,7 +941,7 @@ export default function Home({ kakaoChannelUrl }: { kakaoChannelUrl?: string | n
             >
               <span>✨ 메모로 새로 쓰기</span>
               <span className="text-[11px] font-bold bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded">
-                4문항 일괄 생성
+                1문항 무료 미리보기
               </span>
             </button>
           </div>
@@ -1046,7 +1047,7 @@ export default function Home({ kakaoChannelUrl }: { kakaoChannelUrl?: string | n
                   </span>
                 </div>
                 <p className="text-xs text-gray-500 mb-2.5 break-keep">
-                  지원 직무·경험 키워드만 적어주시면 표준 4문항(지원동기·직무역량·협업갈등·입사후포부)을 한 번에 생성하고 1번 문항을 무료로 먼저 공개합니다.{" "}
+                  지원 직무·경험 키워드만 적어주시면 표준 4문항(지원동기·직무역량·협업갈등·입사후포부)을 한 번에 생성하고, 1번 문항은 무료 미리보기로 전체 공개(2~4번 문항 및 면접 10선은 결제 후 잠금 해제)합니다.{" "}
                   <span className="text-red-600 font-semibold">주민번호·연락처 등 민감정보는 입력하지 마세요.</span>
                 </p>
                 <textarea
@@ -1166,7 +1167,7 @@ export default function Home({ kakaoChannelUrl }: { kakaoChannelUrl?: string | n
           <PaymentSection
             priceDisplay={PRICE_DISPLAY}
             title={`공고 지원 완성 패키지 결제 (${PRICE_DISPLAY}원)`}
-            subTitle="자소서 4문항 완성본 + 맞춤 면접 질문 10선 + 총 3회 생성/재생성 포함"
+            subTitle={`자소서 4문항 완성본 + 맞춤 면접 질문 10선 + ${PAID_GENERATIONS_BREAKDOWN} 포함`}
             customerEmail={customerEmail}
             onCustomerEmailChange={(v) => {
               setCustomerEmail(v);

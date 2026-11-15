@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { PAID_GENERATIONS_BREAKDOWN, REFUND_SUMMARY_TEXT } from "@/lib/policy";
 
 export default function PackageComparisonTable() {
   const rows = [
@@ -20,12 +21,12 @@ export default function PackageComparisonTable() {
     {
       feature: "생성 횟수 · 재열람",
       free: "미리보기 최대 2시간 보관",
-      paid: "총 3회 생성/재생성 · 7일 보관 링크 · TXT 저장",
+      paid: `${PAID_GENERATIONS_BREAKDOWN} · 7일 보관 링크 · TXT 저장`,
     },
     {
       feature: "시스템 오류 보호",
       free: "-",
-      paid: "최초 생성 실패 시 토스 100% 자동 환불",
+      paid: REFUND_SUMMARY_TEXT,
     },
   ];
 
@@ -37,14 +38,14 @@ export default function PackageComparisonTable() {
             무료 체험 vs 공고 지원 완성 패키지 비교
           </h3>
           <p className="text-[11px] text-gray-500 mt-0.5">
-            결제 시 3회 생성권이 발급되어 무료 미리보기 잠금해제(1회) 후에도 2회 추가 수정이 가능합니다.
+            결제 시 {PAID_GENERATIONS_BREAKDOWN} 이용권이 발급되어 무료 미리보기 잠금해제 후에도 2회 추가 수정이 가능합니다.
           </p>
         </div>
         <Link
           href="/sample"
           className="text-xs font-bold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-2.5 py-1.5 rounded-lg transition-colors whitespace-nowrap"
         >
-          합격 샘플 먼저 보기 ↗
+          AI 생성 샘플 먼저 보기 ↗
         </Link>
       </div>
 

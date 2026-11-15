@@ -1,7 +1,12 @@
 "use client";
 
 import React from "react";
-import { PAID_BENEFIT_TEXT, PAID_SUB_TEXT, freeLimitButtonText } from "@/lib/policy";
+import {
+  PAID_BENEFIT_TEXT,
+  PAID_SUB_TEXT,
+  REFUND_SUMMARY_TEXT,
+  freeLimitButtonText,
+} from "@/lib/policy";
 import { BUSINESS_INFO } from "@/lib/siteConfig";
 
 export interface PaymentSectionProps {
@@ -194,7 +199,7 @@ export default function PaymentSection({
           onChange={(e) => onAgreedChange(e.target.checked)}
         />
         <span className="text-xs sm:text-sm text-gray-700 leading-relaxed break-keep">
-          <strong>[필수]</strong> 결제 완료 시 즉시 AI 생성이 시작되는 디지털 콘텐츠 특성상, 생성 시작 후 단순 변심에 의한 환불이 불가함에 동의합니다. (시스템 오류 시 100% 전액 환불){" "}
+          <strong>[필수]</strong> 결제 완료 시 즉시 AI 생성이 시작되는 디지털 콘텐츠 특성상, 생성 시작 후 단순 변심에 의한 환불이 불가함에 동의합니다. ({REFUND_SUMMARY_TEXT}){" "}
           <a
             href="/refund"
             target="_blank"

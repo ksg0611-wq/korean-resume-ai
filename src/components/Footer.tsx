@@ -55,7 +55,7 @@ export default function Footer() {
         </div>
 
         <div className="mt-8 text-center text-xs text-gray-400">
-          © {new Date().getFullYear()} Korean Resume AI. All rights reserved.
+          © {new Date().getFullYear()} {b.serviceName}. All rights reserved.
         </div>
       </div>
     </footer>

@@ -3,7 +3,8 @@
 import { useState, type ReactNode } from "react";
 import {
   FREE_LIMITS,
-  PAID_GENERATIONS,
+  PAID_GENERATIONS_BREAKDOWN,
+  REFUND_SUMMARY_TEXT,
 } from "@/lib/policy";
 
 const faqs: { question: string; answer: ReactNode }[] = [
@@ -26,12 +27,12 @@ const faqs: { question: string; answer: ReactNode }[] = [
   },
   {
     question: "결제 후 몇 번까지 생성할 수 있나요?",
-    answer: `1회 결제 시 ${PAID_GENERATIONS}회 작성 및 재생성이 가능하며, 이용권은 구매일로부터 1년간 유효합니다.`,
+    answer: `1회 결제 시 ${PAID_GENERATIONS_BREAKDOWN}이 가능하며, 이용권은 구매일로부터 1년간 유효합니다.`,
   },
   {
     question: "미리보기 잠금해제는 성공했는데 면접 질문 10선만 실패하면 어떻게 되나요?",
     answer:
-      "자소서 4문항 본문이 이미 잠금 해제·저장된 경우 주된 서비스가 제공되었으므로 전액 환불 대상에 해당하지 않으며, 대신 결과 화면에서 추가 생성 횟수 차감 없이 '면접 질문 10선 무료 다시 생성' 버튼으로 무료 재시도를 제공합니다.",
+      `${REFUND_SUMMARY_TEXT} 원칙에 따라, 자소서 4문항 본문이 이미 잠금 해제·저장된 경우 주된 서비스가 제공되었으므로 전액 환불 대상에 해당하지 않으며, 대신 결과 화면에서 추가 생성 횟수 차감 없이 '면접 질문 10선 무료 다시 생성' 버튼으로 무료 재시도를 제공합니다.`,
   },
 ];
 

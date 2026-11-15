@@ -45,8 +45,11 @@ export function freeLimitExceededMessage(kind: FreeLimitKind): string {
   return `무료 생성 횟수(일 ${FREE_LIMITS[kind]}회)가 초과되었습니다.`;
 }
 
-export const PAID_BENEFIT_TEXT = `STAR 기반 ${PAID_GENERATIONS}회 생성/재생성 포함`;
-export const PAID_SUB_TEXT = `${PAID_GENERATIONS}회 포함`;
+export const PAID_GENERATIONS_BREAKDOWN = `총 ${PAID_GENERATIONS}회(미리보기 해제 1회 + 재생성 ${PAID_GENERATIONS - 1}회)`;
+export const PAID_BENEFIT_TEXT = `STAR 기반 ${PAID_GENERATIONS_BREAKDOWN} 포함`;
+export const PAID_SUB_TEXT = `${PAID_GENERATIONS_BREAKDOWN}`;
+export const REFUND_SUMMARY_TEXT =
+  "최초 생성 실패 시 자동 전액 환불, 면접 질문만 실패 시 무료 재시도";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 

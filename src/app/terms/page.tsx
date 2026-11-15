@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import PolicyShell, { PolicySection } from "@/components/PolicyShell";
-import { PAID_GENERATIONS } from "@/lib/policy";
+import { PAID_GENERATIONS_BREAKDOWN } from "@/lib/policy";
 
 export const metadata: Metadata = {
   title: "이용약관 | Korea Resume AI",
@@ -13,7 +13,7 @@ export default function TermsPage() {
   return (
     <PolicyShell title="이용약관">
       <PolicySection heading="제1조 (목적)">
-        <p>본 약관은 Korean Resume AI(이하 &quot;서비스&quot;)의 이용 조건 및 절차에 관한 사항을 규정함을 목적으로 합니다.</p>
+        <p>본 약관은 Korea Resume AI(이하 &quot;서비스&quot;)의 이용 조건 및 절차에 관한 사항을 규정함을 목적으로 합니다.</p>
       </PolicySection>
       <PolicySection heading="제2조 (서비스의 제공)">
         <p>
@@ -29,7 +29,7 @@ export default function TermsPage() {
           <Link href="/refund" className="text-blue-600 underline">환불정책</Link>에 따릅니다.
         </p>
         <p>
-          {`유료 이용권(${PAID_GENERATIONS}회 생성권)의 유효기간은 구매일로부터 1년이며, 유효기간이 경과하면 잔여 생성 횟수는 자동 소멸됩니다.`}
+          {`유료 이용권(${PAID_GENERATIONS_BREAKDOWN})의 유효기간은 구매일로부터 1년이며, 유효기간이 경과하면 잔여 생성 횟수는 자동 소멸됩니다.`}
         </p>
       </PolicySection>
       <PolicySection heading="제5조 (개인정보 보호)">

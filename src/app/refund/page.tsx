@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import PolicyShell, { PolicySection } from "@/components/PolicyShell";
+import { REFUND_SUMMARY_TEXT } from "@/lib/policy";
 import { BUSINESS_INFO } from "@/lib/siteConfig";
 
 export const metadata: Metadata = {
@@ -21,6 +22,9 @@ export default function RefundPage() {
         </p>
       </PolicySection>
       <PolicySection heading="2. 시스템 오류 시 전액 환불 및 부분 실패 재시도 예외">
+        <p className="font-semibold text-gray-900">
+          {REFUND_SUMMARY_TEXT}
+        </p>
         <p>
           서비스 시스템 오류로 인해 최초 결제 후 자소서 결과물(4문항 완성본 또는 미리보기 잠금해제 본문)이 1회도 정상 생성되지 않은 경우, 토스페이먼츠 API를 통해 자동 전액 환불 처리되며 고객센터({b.email}) 문의 시에도 확인 후 100% 환불해 드립니다.
         </p>
