@@ -10,6 +10,7 @@ const STATUS_BADGE: Record<OrderRecord["status"], { label: string; cls: string }
   paid: { label: "결제완료 · 미생성(paid)", cls: "bg-amber-100 text-amber-800 border-amber-200" },
   generating: { label: "생성 중(generating)", cls: "bg-blue-100 text-blue-800 border-blue-200" },
   done: { label: "생성완료(done)", cls: "bg-emerald-100 text-emerald-800 border-emerald-200" },
+  interview_pending: { label: "면접 미완료 · 부분점검(interview_pending)", cls: "bg-amber-100 text-amber-900 border-amber-300" },
   refunded: { label: "자동전액환불(refunded)", cls: "bg-purple-100 text-purple-800 border-purple-200" },
   refund_failed: { label: "환불처리중·확인(refund_failed)", cls: "bg-red-100 text-red-800 border-red-200" },
   failed: { label: "실패·점검필요(failed)", cls: "bg-red-100 text-red-800 border-red-200" },

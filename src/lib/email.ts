@@ -66,7 +66,10 @@ export async function sendResultEmail(options: {
   const fullResultUrl = resultUrl.startsWith("http")
     ? resultUrl
     : `${SITE_URL}${resultUrl}`;
-  const serviceLabel = serviceType === "interview" ? "AI 면접 꼬리질문 리포트" : "AI 자기소개서 초안";
+  const serviceLabel =
+    serviceType === "interview"
+      ? "AI 공공기관 면접 시뮬레이터 대비 노트"
+      : "AI 자기소개서 초안";
   const expiresKst = formatKstDateTime(expiresAt);
 
   const safeOrderId = escapeHtml(orderId);

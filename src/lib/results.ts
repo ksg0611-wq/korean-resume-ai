@@ -1,10 +1,16 @@
 import { requireRedisCredentials } from "@/lib/redisConfig";
 
 export type ServiceType = "resume" | "interview";
+export type PlanType =
+  | "resume_single"
+  | "interview_single"
+  | "bundle"
+  | "interview_upgrade";
 export type OrderStatus =
   | "paid"
   | "generating"
   | "done"
+  | "interview_pending"
   | "refunded"
   | "refund_failed"
   | "failed";
@@ -12,6 +18,7 @@ export type OrderStatus =
 export interface OrderRecord {
   orderId: string;
   serviceType: ServiceType;
+  planType?: PlanType;
   paymentKey: string;
   amount: number;
   email?: string | null;
@@ -37,6 +44,7 @@ export interface OrderRecord {
   refundReason?: string | null;
   resultTokenHash?: string | null;
   resultExpiresAt?: string | null;
+  activeSessionId?: string | null;
   verified?: boolean;
 }
 
@@ -78,6 +86,50 @@ export interface PreviewRecord {
   expiresAt: string;
 }
 
+export interface InterviewPrepFollowUpNote {
+  depth: 1 | 2 | 3;
+  ncsCompetency: string;
+  focus: string;
+  question: string;
+  userAnswer?: string | null;
+  totalScore?: number | null;
+  consistencyLabel?: string | null;
+  consistencyReason?: string | null;
+  feedback3Lines?: string[];
+  digPoint?: string | null;
+  modelAnswer?: string | null;
+}
+
+export interface InterviewPrepNoteEntry {
+  questionId: string;
+  number: number;
+  kind: "job" | "personality";
+  ncsCompetency: string;
+  intentSummary: string;
+  question: string;
+  userAnswer?: string | null;
+  totalScore?: number | null;
+  consistencyApplied?: boolean;
+  consistencyLabel?: string | null;
+  consistencyReason?: string | null;
+  feedback3Lines?: string[];
+  digPoint?: string | null;
+  modelAnswer?: string | null;
+  followUps: InterviewPrepFollowUpNote[];
+}
+
+export interface InterviewPrepNote {
+  sessionId: string;
+  jobCategory: string;
+  totalQuestions: number;
+  answeredCount: number;
+  maxEvaluations: number;
+  usedEvaluations: number;
+  remainingEvaluations: number;
+  updatedAt: string;
+  entries: InterviewPrepNoteEntry[];
+}
+
 export interface StoredResultRecord {
   orderId: string;
   serviceType: ServiceType;
@@ -92,6 +144,8 @@ export interface StoredResultRecord {
   interviewQuestions?: InterviewQuestionItem[];
   interviewPending?: boolean;
   interviewError?: string | null;
+  interviewSessionId?: string | null;
+  interviewNote?: InterviewPrepNote | null;
   jobTitle?: string | null;
   sourceMemo?: string | null;
 }

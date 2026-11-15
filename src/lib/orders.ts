@@ -1,5 +1,6 @@
 import {
   PAID_GENERATIONS,
+  PAID_INTERVIEW_GENERATIONS,
   PAID_ORDER_TTL_SECONDS,
   PREVIEW_TTL_SECONDS,
   RESULT_TTL_SECONDS,
@@ -15,13 +16,19 @@ import {
   getPreviewKey,
   getResultKey,
   hashResultToken,
+  type InterviewPrepNote,
   type InterviewQuestionItem,
   type OrderRecord,
+  type PlanType,
   type PreviewRecord,
   type ResumeQuestionItem,
   type ServiceType,
   type StoredResultRecord,
 } from "@/lib/results";
+
+export function getInitialGenerationsForService(serviceType: ServiceType): number {
+  return serviceType === "interview" ? PAID_INTERVIEW_GENERATIONS : PAID_GENERATIONS;
+}
 import { cancelTossPayment, type TossCancelResult } from "@/lib/toss";
 import { sanitizeErrorText } from "@/lib/alerts";
 
@@ -248,12 +255,13 @@ async function indexOrderKey(orderKey: string): Promise<void> {
 export async function saveConfirmedOrder(options: {
   orderId: string;
   serviceType: ServiceType;
+  planType?: PlanType;
   paymentKey: string;
   amount: number;
   email?: string | null;
   receiptUrl?: string | null;
 }): Promise<{ order: OrderRecord; alreadyConfirmed: boolean }> {
-  const { orderId, serviceType, paymentKey, amount, email, receiptUrl } = options;
+  const { orderId, serviceType, planType, paymentKey, amount, email, receiptUrl } = options;
   const redis = requireRedisClient();
   const orderKey = getOrderKey(orderId, serviceType);
   const existing = await redis.get<OrderRecord>(orderKey);
@@ -265,18 +273,22 @@ export async function saveConfirmedOrder(options: {
 
   const now = new Date().toISOString();
   const cleanEmail = normalizeEmail(email);
+  const initialGenerations = getInitialGenerationsForService(serviceType);
 
   const record: OrderRecord = {
     orderId,
     serviceType,
+    planType:
+      planType ??
+      (serviceType === "interview" ? "interview_single" : "resume_single"),
     paymentKey,
     amount: Number.isFinite(amount) ? amount : 0,
     email: cleanEmail,
     receiptUrl: receiptUrl ?? null,
     paid: true,
     status: "paid",
-    totalGenerations: PAID_GENERATIONS,
-    remainingGenerations: PAID_GENERATIONS,
+    totalGenerations: initialGenerations,
+    remainingGenerations: initialGenerations,
     usedCount: 0,
     paidAt: now,
     generatingAt: null,
@@ -294,6 +306,7 @@ export async function saveConfirmedOrder(options: {
     refundReason: null,
     resultTokenHash: null,
     resultExpiresAt: null,
+    activeSessionId: null,
     ...(serviceType === "interview" ? { verified: true } : {}),
   };
 
@@ -329,6 +342,8 @@ export async function beginPaidGeneration(options: {
   const nowIso = new Date(nowMs).toISOString();
   const lockToken = generateSecureToken();
 
+  const defaultTotalGenerations = getInitialGenerationsForService(serviceType);
+
   const rawEval = await redis.eval<string[], string | BeginGenerationLuaResult>(
     BEGIN_GENERATION_LUA,
     [orderKey, lockKey],
@@ -338,7 +353,7 @@ export async function beginPaidGeneration(options: {
       String(GENERATING_STALE_MS),
       String(GENERATING_LOCK_TTL_SECONDS),
       lockToken,
-      String(PAID_GENERATIONS),
+      String(defaultTotalGenerations),
       orderId,
       serviceType,
     ]
@@ -377,6 +392,8 @@ export async function completePaidGeneration(options: {
   interviewQuestions?: InterviewQuestionItem[];
   interviewPending?: boolean;
   interviewError?: string | null;
+  interviewSessionId?: string | null;
+  interviewNote?: InterviewPrepNote | null;
   jobTitle?: string | null;
   sourceMemo?: string | null;
 }): Promise<{
@@ -395,6 +412,8 @@ export async function completePaidGeneration(options: {
     interviewQuestions,
     interviewPending,
     interviewError,
+    interviewSessionId,
+    interviewNote,
     jobTitle,
     sourceMemo,
   } = options;
@@ -429,6 +448,8 @@ export async function completePaidGeneration(options: {
     ...(interviewQuestions ? { interviewQuestions } : {}),
     ...(typeof interviewPending === "boolean" ? { interviewPending } : {}),
     ...(interviewError !== undefined ? { interviewError } : {}),
+    ...(interviewSessionId !== undefined ? { interviewSessionId } : {}),
+    ...(interviewNote !== undefined ? { interviewNote } : {}),
     ...(jobTitle !== undefined ? { jobTitle } : {}),
     ...(sourceMemo !== undefined ? { sourceMemo } : {}),
   };
@@ -454,6 +475,7 @@ export async function completePaidGeneration(options: {
     lastError: null,
     resultTokenHash,
     resultExpiresAt: expiresAtIso,
+    ...(interviewSessionId !== undefined ? { activeSessionId: interviewSessionId } : {}),
   };
 
   await persistOrderAndReleaseLock({
@@ -634,6 +656,37 @@ export async function updateOrderInterviewQuestions(options: {
     interviewPending: false,
     interviewError: null,
     ...(options.text ? { text: options.text } : {}),
+  };
+
+  await redis.set(resultKey, updated, { ex: remainingTtl });
+  return updated;
+}
+
+/**
+ * 유료 면접 시뮬레이터 답변 채점·꼬리질문 때마다 result:{orderId} 면접 대비 노트를 자동 갱신
+ * (기존 token / tokenHash / expiresAt / 잔여 7일 TTL 그대로 보존)
+ */
+export async function updateOrderInterviewNote(options: {
+  orderId: string;
+  interviewSessionId: string;
+  interviewNote: InterviewPrepNote;
+  text: string;
+}): Promise<StoredResultRecord | null> {
+  const redis = requireRedisClient();
+  const resultKey = getResultKey(options.orderId);
+  const existing = await redis.get<StoredResultRecord>(resultKey);
+  if (!existing) return null;
+
+  const expiresMs = Date.parse(existing.expiresAt);
+  const remainingTtl = Number.isFinite(expiresMs)
+    ? Math.max(60, Math.floor((expiresMs - Date.now()) / 1000))
+    : RESULT_TTL_SECONDS;
+
+  const updated: StoredResultRecord = {
+    ...existing,
+    interviewSessionId: options.interviewSessionId,
+    interviewNote: options.interviewNote,
+    text: options.text,
   };
 
   await redis.set(resultKey, updated, { ex: remainingTtl });
@@ -869,6 +922,7 @@ export function isOrderMismatch(order: Partial<OrderRecord>): boolean {
   return (
     order.status === "paid" ||
     order.status === "generating" ||
+    order.status === "interview_pending" ||
     order.status === "refund_failed" ||
     order.status === "failed"
   );
