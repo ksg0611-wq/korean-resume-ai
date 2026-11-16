@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI, SchemaType, type Schema } from "@google/generative-ai";
 import { GEMINI_CONFIG, generateContentWithFallback } from "@/lib/gemini";
+import { sanitizeInterviewQuestionText } from "@/lib/textMetrics";
 import {
   INTERVIEW_FREE_QUESTION_COUNT,
   INTERVIEW_JOB_QUESTION_COUNT,
@@ -204,7 +205,7 @@ ${NCS_COMPETENCIES.join(", ")}
 [작성 규칙]
 1. 직무 질문(job)은 지원자 자소서에 나온 실제 경험·역할·행동의 진위와 한계를 검증하도록 날카롭게 작성하세요.
 2. 공공기관 인성·조직적합성 질문(personality)은 청렴, 공익 우선, 규정 준수 대 고객 편의 갈등, 민원 응대, 조직 내 소통 등 공공기관 면접 핵심 주제로 출제하세요.
-3. 자소서 원문에 없는 수치나 이력을 질문에 지어내지 마세요.
+3. 자소서 원문에 없는 수치(예: 원문 인원×시간을 임의로 합산한 시간, 임의의 배수·비율·건수·금액 가정, "데이터가 10배 늘어난다면" 같은 가상 수치)나 이력을 질문에 절대 지어내지 마세요. 규모 확장이나 부하 상황을 가정할 때도 숫자를 쓰지 말고 "대폭", "크게", "다수", "상당한 기간" 등 정성적 표현으로만 질문하고, "[본인 수치 입력]" 같은 대괄호 표기도 절대 넣지 마세요.
 4. intentSummary는 면접관이 이 질문으로 검증하려는 핵심 의도(1문장)를 적으세요.
 5. question은 실제 면접관 어조의 직접 질문 1~2문장으로 작성하세요.
 
@@ -214,10 +215,11 @@ ${jobCategory.trim()}
 [지원자 자기소개서]
 ${resumeText.trim()}`;
 
+  const targetModel = isFree ? GEMINI_CONFIG.FREE_MODEL : GEMINI_CONFIG.WRITING_MODEL;
   const genResult = await generateContentWithFallback(
     genAI,
     prompt,
-    GEMINI_CONFIG.PRIMARY_MODEL,
+    targetModel,
     "low",
     {
       temperature: 0.2,
@@ -254,6 +256,17 @@ ${resumeText.trim()}`;
     .map((item, idx) => {
       const num = idx + 1;
       const expectedKind = idx < jobThreshold ? "job" : "personality";
+      const rawIntent =
+        typeof item.intentSummary === "string" && item.intentSummary.trim()
+          ? item.intentSummary.trim()
+          : expectedKind === "personality"
+            ? "공직가치 및 조직적합성 검증"
+            : "직무 관련 경험의 실제 기여도 및 문제해결 논리 검증";
+      const rawQuestion =
+        typeof item.question === "string" && item.question.trim()
+          ? item.question.trim()
+          : "해당 경험에서 본인이 직접 판단하고 실행한 핵심 조치와 결과를 구체적으로 말씀해 주세요.";
+
       return {
         id: `q${num}`,
         number: num,
@@ -264,16 +277,8 @@ ${resumeText.trim()}`;
               : item.kind
             : expectedKind,
         ncsCompetency: normalizeNcsCompetency(item.ncsCompetency),
-        intentSummary:
-          typeof item.intentSummary === "string" && item.intentSummary.trim()
-            ? item.intentSummary.trim()
-            : expectedKind === "personality"
-              ? "공직가치 및 조직적합성 검증"
-              : "직무 관련 경험의 실제 기여도 및 문제해결 논리 검증",
-        question:
-          typeof item.question === "string" && item.question.trim()
-            ? item.question.trim()
-            : "해당 경험에서 본인이 직접 판단하고 실행한 핵심 조치와 결과를 구체적으로 말씀해 주세요.",
+        intentSummary: sanitizeInterviewQuestionText(rawIntent, resumeText),
+        question: sanitizeInterviewQuestionText(rawQuestion, resumeText),
       };
     });
 
@@ -401,7 +406,7 @@ ${userAnswer.trim()}`;
   const genResult = await generateContentWithFallback(
     genAI,
     prompt,
-    GEMINI_CONFIG.PRIMARY_MODEL,
+    GEMINI_CONFIG.SCORING_MODEL,
     "low",
     {
       temperature: 0,
