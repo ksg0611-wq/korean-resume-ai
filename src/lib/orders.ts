@@ -470,6 +470,7 @@ export async function completePaidGeneration(options: {
   interviewSessionId?: string | null;
   interviewNote?: InterviewPrepNote | null;
   jobTitle?: string | null;
+  jobSn?: number | null;
   sourceMemo?: string | null;
 }): Promise<{
   order: OrderRecord;
@@ -490,6 +491,7 @@ export async function completePaidGeneration(options: {
     interviewSessionId,
     interviewNote,
     jobTitle,
+    jobSn,
     sourceMemo,
   } = options;
   const redis = requireRedisClient();
@@ -509,12 +511,20 @@ export async function completePaidGeneration(options: {
     resultTokenHash = await hashResultToken(resultToken);
   }
 
+  const effectiveJobSn =
+    typeof jobSn === "number" && jobSn > 0
+      ? jobSn
+      : typeof existingResult?.jobSn === "number" && existingResult.jobSn > 0
+        ? existingResult.jobSn
+        : null;
+
   const storedResult: StoredResultRecord = {
     orderId: order.orderId,
     serviceType: order.serviceType,
     ...(order.linkedInterviewOrderId
       ? { linkedInterviewOrderId: order.linkedInterviewOrderId }
       : {}),
+    ...(effectiveJobSn ? { jobSn: effectiveJobSn } : {}),
     token: resultToken,
     tokenHash: resultTokenHash,
     title,
@@ -591,6 +601,7 @@ return raw
  */
 export async function savePreviewRecord(options: {
   jobTitle: string;
+  jobSn?: number | null;
   memo: string;
   items: ResumeQuestionItem[];
   usedModel: string;
@@ -602,6 +613,9 @@ export async function savePreviewRecord(options: {
   const record: PreviewRecord = {
     previewToken,
     jobTitle: options.jobTitle,
+    ...(typeof options.jobSn === "number" && options.jobSn > 0
+      ? { jobSn: options.jobSn }
+      : {}),
     memo: options.memo,
     items: options.items,
     usedModel: options.usedModel,

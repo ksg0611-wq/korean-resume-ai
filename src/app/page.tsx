@@ -2,6 +2,12 @@ import type { Metadata } from "next";
 import HomeClient from "./HomeClient";
 import { BUSINESS_INFO } from "@/lib/siteConfig";
 import { getServerPaymentLockState } from "@/lib/paymentAccess";
+import { getJobDetail } from "@/lib/db/jobs";
+import {
+  buildHomeJobContextSummary,
+  parseJobSn,
+  type HomeJobContextSummary,
+} from "@/lib/jobContext";
 
 export const dynamic = "force-dynamic";
 
@@ -12,12 +18,34 @@ export const metadata: Metadata = {
   },
 };
 
-export default function HomePage() {
+export default async function HomePage({
+  searchParams,
+}: {
+  searchParams?: { sn?: string | string[] };
+}) {
   const { paymentLocked } = getServerPaymentLockState();
+  const rawSn = Array.isArray(searchParams?.sn)
+    ? searchParams?.sn[0]
+    : searchParams?.sn;
+  const sn = parseJobSn(rawSn);
+
+  let initialJobContext: HomeJobContextSummary | null = null;
+  if (sn) {
+    try {
+      const job = await getJobDetail(sn);
+      if (job) {
+        initialJobContext = buildHomeJobContextSummary(job);
+      }
+    } catch (err) {
+      console.warn(`[HomePage] Failed to load job context for sn=${sn}:`, err);
+    }
+  }
+
   return (
     <HomeClient
       kakaoChannelUrl={BUSINESS_INFO.kakaoChannelUrl}
       paymentLocked={paymentLocked}
+      initialJobContext={initialJobContext}
     />
   );
 }

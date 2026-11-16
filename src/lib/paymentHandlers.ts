@@ -24,6 +24,7 @@ import { normalizeEmail, PRICING_PLANS } from "@/lib/policy";
 import type { InterviewQuestionItem, PlanType, ServiceType } from "@/lib/results";
 import { BUSINESS_INFO } from "@/lib/siteConfig";
 import { isPaymentLockedForRequest } from "@/lib/adminAuth";
+import { resolveVerifiedJobContext } from "@/lib/jobContext";
 
 /**
  * 토스 결제 승인 공통 라우트 핸들러 (/api/payments/success, /api/interview/payment 공용)
@@ -466,6 +467,7 @@ export async function executePaidPackageGeneration(options: {
   orderId: string;
   genAI: GoogleGenerativeAI;
   jobTitle: string;
+  jobSn?: number | null;
   memo: string;
   previewToken?: string | null;
   fromDiagnosis?: boolean;
@@ -478,6 +480,7 @@ export async function executePaidPackageGeneration(options: {
     orderId,
     genAI,
     jobTitle,
+    jobSn,
     memo,
     previewToken,
     fromDiagnosis,
@@ -539,7 +542,12 @@ export async function executePaidPackageGeneration(options: {
       : null;
 
     if (consumedPreview && Array.isArray(consumedPreview.items) && consumedPreview.items.length > 0) {
-      const resolvedJobTitle = cleanJobTitle || consumedPreview.jobTitle || "";
+      const effectiveJobSn = jobSn ?? consumedPreview.jobSn ?? null;
+      const jobContext = await resolveVerifiedJobContext(effectiveJobSn);
+      const resolvedJobTitle =
+        cleanJobTitle ||
+        consumedPreview.jobTitle ||
+        (jobContext ? `[${jobContext.instName}] ${jobContext.title}` : "");
       const resumeContext = consumedPreview.items
         .map((item) => `[${item.title}]\n${item.body}`)
         .join("\n\n");
@@ -554,6 +562,7 @@ export async function executePaidPackageGeneration(options: {
           genAI,
           jobTitle: resolvedJobTitle,
           resumeContext,
+          jobContext,
         });
         interviewQuestions = interviewRes.questions;
         interviewModelUsed = interviewRes.usedModel;
@@ -597,6 +606,7 @@ export async function executePaidPackageGeneration(options: {
         interviewPending,
         interviewError,
         jobTitle: resolvedJobTitle,
+        jobSn: jobContext?.sn ?? effectiveJobSn,
         sourceMemo: consumedPreview.memo || cleanMemo || null,
       });
 
@@ -638,17 +648,26 @@ export async function executePaidPackageGeneration(options: {
       });
     }
 
-    // 2. Branch B (진단 완성본 생성 또는 신규/재생성): 메모 복구 fallback 확인
+    // 2. Branch B (진단 완성본 생성 또는 신규/재생성): 메모·공고 컨텍스트 복구 fallback 확인
     let effectiveMemo = cleanMemo;
     let effectiveJobTitle = cleanJobTitle;
-    if (!effectiveMemo) {
+    let effectiveJobSn = jobSn ?? null;
+    if (!effectiveMemo || !effectiveJobSn) {
       const prevStored = await getStoredResultForOrder(orderId);
-      if (prevStored?.sourceMemo) {
+      if (!effectiveMemo && prevStored?.sourceMemo) {
         effectiveMemo = prevStored.sourceMemo;
       }
       if (!effectiveJobTitle && prevStored?.jobTitle) {
         effectiveJobTitle = prevStored.jobTitle;
       }
+      if (!effectiveJobSn && prevStored?.jobSn) {
+        effectiveJobSn = prevStored.jobSn;
+      }
+    }
+
+    const jobContext = await resolveVerifiedJobContext(effectiveJobSn);
+    if (!effectiveJobTitle && jobContext) {
+      effectiveJobTitle = `[${jobContext.instName}] ${jobContext.title}`;
     }
 
     if (!effectiveMemo) {
@@ -686,6 +705,7 @@ export async function executePaidPackageGeneration(options: {
         jobTitle: effectiveJobTitle,
         memo: effectiveMemo,
         revisionWeaknesses,
+        jobContext,
         perAttemptTimeoutMs: 42_000,
         fallbackAttemptTimeoutMs: 12_000,
         totalBudgetMs: 54_000,
@@ -694,6 +714,7 @@ export async function executePaidPackageGeneration(options: {
         genAI,
         jobTitle: effectiveJobTitle,
         resumeContext: effectiveMemo,
+        jobContext,
       })
         .then((data) => ({ ok: true as const, data }))
         .catch((err) => ({ ok: false as const, error: err })),
@@ -742,6 +763,7 @@ export async function executePaidPackageGeneration(options: {
       interviewPending,
       interviewError,
       jobTitle: effectiveJobTitle,
+      jobSn: jobContext?.sn ?? effectiveJobSn,
       sourceMemo: effectiveMemo,
     });
 

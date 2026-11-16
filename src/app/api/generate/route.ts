@@ -15,6 +15,7 @@ import { reportServerError } from "@/lib/alerts";
 
 import { checkAndRecordFreeDraftCall } from "@/lib/freeMetrics";
 import { isForceFailAuthorized } from "@/lib/testFlags";
+import { parseJobSn, resolveVerifiedJobContext } from "@/lib/jobContext";
 
 export const maxDuration = 120;
 
@@ -40,6 +41,7 @@ export async function POST(req: Request) {
     const diagnosticWeaknesses = Array.isArray(body?.diagnosticWeaknesses)
       ? body.diagnosticWeaknesses
       : undefined;
+    const requestedJobSn = parseJobSn(body?.sn);
 
     orderIdForLog = orderId || null;
 
@@ -73,6 +75,7 @@ export async function POST(req: Request) {
         orderId,
         genAI,
         jobTitle,
+        jobSn: requestedJobSn,
         memo,
         previewToken,
         fromDiagnosis,
@@ -108,6 +111,12 @@ export async function POST(req: Request) {
       );
     }
 
+    // 서버 검증 기반 공고 컨텍스트 DB 조회 (클라이언트 텍스트 신뢰 금지)
+    const jobContext = await resolveVerifiedJobContext(requestedJobSn);
+    const resolvedJobTitle =
+      jobTitle ||
+      (jobContext ? `[${jobContext.instName}] ${jobContext.title}` : "");
+
     // 일일 300회 무료 draft 서킷 브레이커: 초과 시 ALERT_WEBHOOK_URL 알림 후 자정까지 gemini-3.8-flash로 자동 전환
     const draftCircuit = await checkAndRecordFreeDraftCall();
 
@@ -115,8 +124,9 @@ export async function POST(req: Request) {
     // (Vercel Fluid Compute maxDuration = 120,000ms 대비 충분한 입출력·Redis 안전 마진 확보)
     const draftResult = await generateFourQuestionsResume({
       genAI,
-      jobTitle,
+      jobTitle: resolvedJobTitle,
       memo,
+      jobContext,
       preferredModel: draftCircuit.preferredModel,
       perAttemptTimeoutMs: 42_000,
       fallbackAttemptTimeoutMs: 12_000,
@@ -128,7 +138,8 @@ export async function POST(req: Request) {
 
     try {
       const saved = await savePreviewRecord({
-        jobTitle,
+        jobTitle: resolvedJobTitle,
+        jobSn: jobContext?.sn ?? requestedJobSn ?? null,
         memo,
         items: draftResult.items,
         usedModel: draftResult.usedModel,
@@ -154,6 +165,7 @@ export async function POST(req: Request) {
       freeRemaining: freeReservation.remaining,
       previewToken: storedPreviewToken,
       previewExpiresAt,
+      jobSn: jobContext?.sn ?? null,
       text: previewItems[0]?.body || "",
       items: previewItems,
       lockedItems,

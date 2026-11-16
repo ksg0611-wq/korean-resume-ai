@@ -82,6 +82,7 @@ export interface InterviewQuestionItem {
 export interface PreviewRecord {
   previewToken: string;
   jobTitle: string;
+  jobSn?: number | null;
   memo: string;
   items: ResumeQuestionItem[];
   usedModel: string;
@@ -153,6 +154,7 @@ export interface StoredResultRecord {
   interviewSessionId?: string | null;
   interviewNote?: InterviewPrepNote | null;
   jobTitle?: string | null;
+  jobSn?: number | null;
   sourceMemo?: string | null;
 }
 

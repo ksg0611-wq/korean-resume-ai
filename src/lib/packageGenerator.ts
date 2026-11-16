@@ -168,16 +168,27 @@ function stripMarkdownFences(raw: string): string {
     .trim();
 }
 
+import {
+  formatJobContextPromptBlock,
+  type VerifiedResumeJobContext,
+} from "@/lib/jobContext";
+
 export async function evaluateDiagnosisWithAI(options: {
   genAI: GoogleGenerativeAI;
   text: string;
   jobTitle?: string;
   questionPrompt?: string;
   targetChars?: number;
+  jobContext?: VerifiedResumeJobContext | null;
 }): Promise<{ evaluation: AIAnchorEvaluation; usedModel: string; durationMs: number }> {
-  const { genAI, text, jobTitle, questionPrompt, targetChars = 700 } = options;
+  const { genAI, text, jobTitle, questionPrompt, targetChars = 700, jobContext } = options;
   const detMetrics = countResumeMetrics(text, targetChars);
   const detBlind = detectBlindViolations(text);
+  const effectiveJobLabel =
+    jobTitle?.trim() ||
+    (jobContext ? `[${jobContext.instName}] ${jobContext.title}` : "") ||
+    "미지정 (일반 사무/기술 직무 기준 평가)";
+  const jobContextBlock = formatJobContextPromptBlock(jobContext, "diagnose");
 
   const prompt = `당신은 10년 이상 경력의 국내 공기업(NCS)·대기업 서류 전형 심사위원입니다.
 아래 자기소개서 원문을 공정하고 일관된 이산 앵커 기준표(Discrete Rubric Anchors)에 따라 채점하고 JSON으로만 응답하세요.
@@ -219,9 +230,9 @@ export async function evaluateDiagnosisWithAI(options: {
 - 블라인드 위반 의심 건수: ${detBlind.totalViolations}건 (점수는 서버가 별도 계산함)
 
 [지원 정보]
-- 지원 기관/직무: ${jobTitle?.trim() || "미지정 (일반 사무/기술 직무 기준 평가)"}
+- 지원 기관/직무: ${effectiveJobLabel}
 - 자기소개서 문항: ${questionPrompt?.trim() || "미지정 (직무역량/지원동기/문제해결 기준 평가)"}
-
+${jobContextBlock}
 [자기소개서 원문]
 ${text.trim()}`;
 
@@ -345,6 +356,7 @@ export async function generateFourQuestionsResume(options: {
   jobTitle: string;
   memo: string;
   revisionWeaknesses?: string[];
+  jobContext?: VerifiedResumeJobContext | null;
   preferredModel?: string;
   perAttemptTimeoutMs?: number;
   fallbackAttemptTimeoutMs?: number;
@@ -367,6 +379,7 @@ export async function generateFourQuestionsResume(options: {
     jobTitle,
     memo,
     revisionWeaknesses,
+    jobContext,
     preferredModel,
     perAttemptTimeoutMs = 42_000,
     fallbackAttemptTimeoutMs = 12_000,
@@ -379,13 +392,18 @@ export async function generateFourQuestionsResume(options: {
 사용자가 제출한 기존 자소서에서 다음 약점들이 진단되었습니다. 사실관계를 훼손하지 않으면서 아래 약점을 모두 해결한 4문항 완성본을 재구성하세요:
 ${revisionWeaknesses.map((w, idx) => `${idx + 1}. ${w}`).join("\n")}\n`
     : "";
+  const effectiveJobLabel =
+    jobTitle.trim() ||
+    (jobContext ? `[${jobContext.instName}] ${jobContext.title}` : "") ||
+    "공공기관/기업 일반 직무";
+  const jobContextBlock = formatJobContextPromptBlock(jobContext, "generate");
 
   const prompt = `당신은 국내 공기업(NCS)·대기업·스타트업 서류 평가 기준에 정통한 전문 에디터입니다.
 지원자의 지원 정보와 경험 메모(또는 기존 자소서 초안)를 바탕으로 **표준 4개 문항 전체 완성본**을 JSON 형식으로 작성해 주세요.
 
 [지원 기업/직무]
-${jobTitle.trim() || "공공기관/기업 일반 직무"}
-
+${effectiveJobLabel}
+${jobContextBlock}
 [지원자 입력 경험·원문]
 ${memo.trim()}
 ${revisionBlock}
@@ -458,6 +476,7 @@ export async function generateTenInterviewQuestions(options: {
   genAI: GoogleGenerativeAI;
   jobTitle: string;
   resumeContext: string;
+  jobContext?: VerifiedResumeJobContext | null;
 }): Promise<{
   questions: InterviewQuestionItem[];
   usedModel: string;
@@ -465,14 +484,19 @@ export async function generateTenInterviewQuestions(options: {
   attempts: number;
   durationMs: number;
 }> {
-  const { genAI, jobTitle, resumeContext } = options;
+  const { genAI, jobTitle, resumeContext, jobContext } = options;
+  const effectiveJobLabel =
+    jobTitle.trim() ||
+    (jobContext ? `[${jobContext.instName}] ${jobContext.title}` : "") ||
+    "공공기관/기업 일반 직무";
+  const jobContextBlock = formatJobContextPromptBlock(jobContext, "interview10");
 
   const prompt = `당신은 공기업·대기업 면접위원장입니다.
 지원자의 지원 직무와 자기소개서(또는 경험 메모) 내용을 정밀 분석하여, 실제 면접장에서 나올 **개인 맞춤형 예상 면접 질문 10개**를 JSON으로 작성해 주세요.
 
 [지원 직무/기관]
-${jobTitle.trim() || "공공기관/기업 일반 직무"}
-
+${effectiveJobLabel}
+${jobContextBlock}
 [지원자 자소서/경험 내용]
 ${resumeContext.trim()}
 

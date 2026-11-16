@@ -11,6 +11,7 @@ import PackageResultTabs from "@/components/PackageResultTabs";
 import PaidResultShareCard, { downloadTextFile } from "@/components/PaidResultShareCard";
 import FAQAccordion from "@/components/FAQAccordion";
 import type { FreeDiagnosticResponse } from "@/lib/diagnoseRubric";
+import type { HomeJobContextSummary } from "@/lib/jobContext";
 import { countResumeMetrics } from "@/lib/textMetrics";
 import type {
   InterviewQuestionItem,
@@ -60,11 +61,15 @@ interface PaidResultInfo {
 export default function Home({
   kakaoChannelUrl,
   paymentLocked = false,
+  initialJobContext = null,
 }: {
   kakaoChannelUrl?: string | null;
   paymentLocked?: boolean;
+  initialJobContext?: HomeJobContextSummary | null;
 }) {
   const [inputMode, setInputMode] = useState<"diagnose" | "draft">("diagnose");
+  const [activeJobContext, setActiveJobContext] =
+    useState<HomeJobContextSummary | null>(initialJobContext ?? null);
 
   // 진단받기 모드 상태 (원문은 브라우저 localStorage에만 임시 보관)
   const [diagnosisText, setDiagnosisText] = useState("");
@@ -79,7 +84,9 @@ export default function Home({
 
   // 메모로 새로 쓰기 모드 상태
   const [resumePrompt, setResumePrompt] = useState("");
-  const [selectedJobTitle, setSelectedJobTitle] = useState("");
+  const [selectedJobTitle, setSelectedJobTitle] = useState(
+    initialJobContext ? `[${initialJobContext.instName}] ${initialJobContext.title}` : ""
+  );
 
   // 미리보기 & 패키지 결과 상태
   const [previewToken, setPreviewToken] = useState<string | null>(null);
@@ -249,6 +256,7 @@ export default function Home({
       let checkoutFlow: "diagnose" | "draft" = "draft";
       let checkoutPreviewToken: string | null = savedPreviewToken;
       let checkoutJobTitle = jobTitleParam?.trim() || "";
+      let checkoutJobSn: number | null = initialJobContext?.sn ?? null;
       let checkoutWeaknesses = savedWeaknesses;
 
       if (checkoutRaw) {
@@ -257,6 +265,9 @@ export default function Home({
           if (parsed.flow === "diagnose") checkoutFlow = "diagnose";
           if (parsed.previewToken) checkoutPreviewToken = parsed.previewToken;
           if (parsed.jobTitle) checkoutJobTitle = parsed.jobTitle;
+          if (typeof parsed.jobSn === "number" && parsed.jobSn > 0) {
+            checkoutJobSn = parsed.jobSn;
+          }
           if (Array.isArray(parsed.weaknesses)) checkoutWeaknesses = parsed.weaknesses;
         } catch {
           // ignore
@@ -270,6 +281,7 @@ export default function Home({
             fromDiagnosis: true,
             memo: savedDiagnosis,
             jobTitle: checkoutJobTitle,
+            jobSn: checkoutJobSn,
             diagnosticWeaknesses: checkoutWeaknesses,
           });
         } else {
@@ -287,6 +299,7 @@ export default function Home({
             previewToken: checkoutPreviewToken,
             memo: savedDraft || "",
             jobTitle: checkoutJobTitle,
+            jobSn: checkoutJobSn,
           });
         }
       }
@@ -355,6 +368,7 @@ export default function Home({
           jobTitle: selectedJobTitle.trim(),
           questionPrompt: questionPrompt.trim(),
           targetChars,
+          ...(activeJobContext?.sn ? { sn: activeJobContext.sn } : {}),
         }),
       });
 
@@ -411,6 +425,7 @@ export default function Home({
           memo: textToUse,
           isFree: true,
           mode: "draft",
+          ...(activeJobContext?.sn ? { sn: activeJobContext.sn } : {}),
         }),
       });
 
@@ -456,6 +471,7 @@ export default function Home({
       memo?: string;
       previewToken?: string | null;
       jobTitle?: string;
+      jobSn?: number | null;
       diagnosticWeaknesses?: string[];
       useFreshGeneration?: boolean;
     }
@@ -489,12 +505,14 @@ export default function Home({
           ? opts.previewToken
           : previewToken;
 
+      const resolvedSn = opts?.jobSn ?? activeJobContext?.sn ?? null;
       const payload: Record<string, any> = {
         orderId: paidOrderId,
         isFree: false,
         jobTitle: (opts?.jobTitle ?? selectedJobTitle).trim() || "일반 직무",
         memo: memoToSend,
         fromDiagnosis: isDiagFlow,
+        ...(resolvedSn ? { sn: resolvedSn } : {}),
         ...(tokenToSend ? { previewToken: tokenToSend } : {}),
         ...(opts?.diagnosticWeaknesses
           ? { diagnosticWeaknesses: opts.diagnosticWeaknesses }
@@ -689,6 +707,7 @@ export default function Home({
           planType: selectedPlanType,
           previewToken: inputMode === "draft" ? previewToken : null,
           jobTitle: selectedJobTitle.trim(),
+          jobSn: activeJobContext?.sn ?? null,
           weaknesses: topWeaknesses,
         })
       );
@@ -815,7 +834,8 @@ export default function Home({
       });
       if (res.ok) {
         const data = await res.json();
-        window.location.href = `/interview?token=${data.token}`;
+        const snSuffix = activeJobContext?.sn ? `&sn=${encodeURIComponent(String(activeJobContext.sn))}` : "";
+        window.location.href = `/interview?token=${data.token}${snSuffix}`;
       } else {
         alert("면접 준비 페이지로 이동하는 데 실패했습니다.");
       }
@@ -830,6 +850,73 @@ export default function Home({
   return (
     <main className="flex-1 bg-gray-50 text-gray-900">
       <div className="max-w-6xl w-full mx-auto px-3.5 sm:px-6 lg:px-8 py-6 sm:py-12 flex flex-col gap-8 sm:gap-10">
+
+        {/* [채용공고 연동 컨텍스트 카드 (/?sn=... 진입 시 서버 DB 조회 결과 표시)] */}
+        {activeJobContext && (
+          <section
+            id="job-context-card"
+            aria-label="선택된 채용공고 정보"
+            className="bg-white rounded-2xl border-2 border-blue-200 shadow-sm p-4 sm:p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 animate-fadeIn"
+          >
+            <div className="space-y-2 min-w-0">
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <span className="font-extrabold text-blue-700 bg-blue-50 border border-blue-200 px-2.5 py-0.5 rounded-lg">
+                  {activeJobContext.instName}
+                </span>
+                <span
+                  className={`font-extrabold px-2.5 py-0.5 rounded-lg border ${
+                    activeJobContext.isUrgent
+                      ? "bg-red-50 text-red-700 border-red-200"
+                      : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                  }`}
+                >
+                  {activeJobContext.dDayLabel}
+                </span>
+                <span className="text-[11px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2.5 py-0.5 rounded-lg">
+                  NCS 직무 · {activeJobContext.ncsNames.length > 0 ? activeJobContext.ncsNames.join(", ") : "일반 직무"}
+                </span>
+                {(activeJobContext.hasQualification || activeJobContext.hasPreference) && (
+                  <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md">
+                    자격요건 · 우대사항 AI 자동 반영
+                  </span>
+                )}
+              </div>
+              <h2 className="text-base sm:text-xl font-extrabold text-gray-900 leading-snug break-keep">
+                {activeJobContext.title}
+              </h2>
+              <p className="text-xs text-gray-500">
+                아래에서 이미 쓴 자소서를 무료 진단하거나, 경험 메모로 공고 맞춤 4문항 초안을 바로 작성해 보세요.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => scrollToForm("diagnose")}
+                className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs sm:text-sm rounded-xl transition-colors cursor-pointer"
+              >
+                이 공고 자소서 작성 · 진단 ↓
+              </button>
+              <Link
+                href={`/jobs/${activeJobContext.sn}`}
+                className="px-3.5 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-800 font-semibold text-xs sm:text-sm rounded-xl transition-colors"
+              >
+                공고 상세 ↗
+              </Link>
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveJobContext(null);
+                  setSelectedJobTitle("");
+                }}
+                className="px-3 py-2.5 bg-white hover:bg-gray-50 border border-gray-200 text-gray-600 font-semibold text-xs rounded-xl transition-colors cursor-pointer"
+                aria-label="선택된 공고 해제"
+              >
+                ✕ 해제
+              </button>
+            </div>
+          </section>
+        )}
 
         {/* [히어로 영역] */}
         <section className="grid grid-cols-1 md:grid-cols-2 gap-8 lg:gap-12 items-start">
@@ -1017,7 +1104,10 @@ export default function Home({
               </div>
               <button
                 type="button"
-                onClick={() => setSelectedJobTitle("")}
+                onClick={() => {
+                  setSelectedJobTitle("");
+                  setActiveJobContext(null);
+                }}
                 className="shrink-0 text-sky-600 hover:text-sky-900 hover:bg-sky-100 px-2 py-0.5 rounded-lg transition-colors font-bold text-xs flex items-center gap-1 cursor-pointer"
                 title="공고 선택 해제"
                 aria-label="공고 선택 해제"

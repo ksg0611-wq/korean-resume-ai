@@ -54,7 +54,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       success: true,
-      message: '사전신청이 성공적으로 등록되었습니다. 오픈 즉시 알림을 발송해 드립니다.',
+      message: `${instName ? `[${instName}] ` : ''}새 공고 알림이 등록되었습니다. 신규 채용공고 오픈 시 이메일로 안내해 드립니다.`,
       data: {
         sn: snNum,
         email: cleanEmail,
@@ -64,7 +64,7 @@ export async function POST(request: Request) {
   } catch (err: any) {
     console.error('[Waitlist] Error:', err);
     return NextResponse.json(
-      { message: '사전신청 처리 중 오류가 발생했습니다: ' + err.message },
+      { message: '새 공고 알림 신청 처리 중 오류가 발생했습니다: ' + err.message },
       { status: 500 }
     );
   }

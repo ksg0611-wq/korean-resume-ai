@@ -3,7 +3,9 @@ import { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getJobDetail } from '@/lib/db/jobs';
+import { calculateJobDDay, toJobDateString } from '@/lib/jobContext';
 import JobDetailAction from './JobDetailAction';
+import NewJobAlertForm from './NewJobAlertForm';
 
 export const dynamic = 'force-dynamic';
 
@@ -28,36 +30,6 @@ export async function generateMetadata({ params }: JobDetailPageProps): Promise<
   };
 }
 
-function toDateString(dateVal: any): string {
-  if (!dateVal) return '';
-  if (dateVal instanceof Date) {
-    return dateVal.toISOString().split('T')[0];
-  }
-  const str = String(dateVal).trim();
-  if (str.includes('T')) {
-    return str.split('T')[0];
-  }
-  return str;
-}
-
-function calculateDDay(endDateVal: any): { label: string; isUrgent: boolean } {
-  const endDateStr = toDateString(endDateVal);
-  if (!endDateStr) return { label: '상시', isUrgent: false };
-  const parts = endDateStr.split('-');
-  if (parts.length < 3) return { label: '상시', isUrgent: false };
-
-  const [year, month, day] = parts.map(Number);
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const target = new Date(year, month - 1, day);
-  const diffTime = target.getTime() - today.getTime();
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-  if (diffDays < 0) return { label: '마감', isUrgent: false };
-  if (diffDays === 0) return { label: '오늘 마감 (D-Day)', isUrgent: true };
-  return { label: `D-${diffDays}`, isUrgent: diffDays <= 7 };
-}
-
 export default async function JobDetailPage({ params }: JobDetailPageProps) {
   const sn = parseInt(params.sn, 10);
   if (isNaN(sn)) notFound();
@@ -65,7 +37,7 @@ export default async function JobDetailPage({ params }: JobDetailPageProps) {
   const job = await getJobDetail(sn);
   if (!job) notFound();
 
-  const dday = calculateDDay(job.end_date);
+  const dday = calculateJobDDay(job.end_date);
 
   return (
     <main className="min-h-screen bg-gray-50 py-8 sm:py-12 px-4 sm:px-6 lg:px-8">
@@ -129,7 +101,7 @@ export default async function JobDetailPage({ params }: JobDetailPageProps) {
 
           {/* Schedule */}
           <div className="mt-4 flex flex-wrap items-center justify-between text-xs text-gray-600">
-            <span>접수 기간: <strong className="text-gray-900">{toDateString(job.start_date) || '-'} ~ {toDateString(job.end_date) || '-'}</strong></span>
+            <span>접수 기간: <strong className="text-gray-900">{toJobDateString(job.start_date) || '-'} ~ {toJobDateString(job.end_date) || '-'}</strong></span>
             {job.relocation_region && (
               <span className="text-indigo-600 font-medium bg-indigo-50 px-2.5 py-0.5 rounded-md">
                 이전지역인재: {job.relocation_region}
@@ -253,6 +225,13 @@ export default async function JobDetailPage({ params }: JobDetailPageProps) {
             </div>
           )}
         </div>
+
+        {/* Optional New Job Alert Form (reuses waitlist_signups cleanly) */}
+        <NewJobAlertForm
+          sn={job.sn}
+          instName={job.inst_name}
+          jobTitle={job.title}
+        />
       </div>
     </main>
   );

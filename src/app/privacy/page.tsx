@@ -46,9 +46,9 @@ export default function PrivacyPage() {
                 <td className={td}>무료 체험 횟수 제한(부정 이용 방지)</td>
               </tr>
               <tr>
-                <td className={td}>채용공고 사전 알림 신청</td>
-                <td className={td}>이메일 주소, 공고 일련번호</td>
-                <td className={td}>공고 오픈 알림 발송</td>
+                <td className={td}>채용공고 새 공고 알림 신청 (선택)</td>
+                <td className={td}>이메일 주소, 공고(기관) 일련번호</td>
+                <td className={td}>해당 기관 신규 채용공고 오픈 알림 발송</td>
               </tr>
             </tbody>
           </table>
@@ -104,9 +104,9 @@ export default function PrivacyPage() {
                 <td className={td}>「전자상거래 등에서의 소비자보호에 관한 법률」에 따라 5년간 보관</td>
               </tr>
               <tr>
-                <td className={td}>사전 알림 신청 이메일</td>
-                <td className={td}>회사 DB</td>
-                <td className={td}>알림 발송 목적 달성 시까지. 삭제를 요청하시면 지체 없이 삭제합니다.</td>
+                <td className={td}>새 공고 알림 신청 이메일 (기존 사전신청 포함)</td>
+                <td className={td}>회사 DB (waitlist_signups)</td>
+                <td className={td}>해당 기관 신규 공고 알림 발송 목적 달성 시(기존 사전신청 건은 정식 오픈 알림 1회 발송 후)까지 보관·파기하며, 삭제 요청 시 지체 없이 삭제합니다.</td>
               </tr>
             </tbody>
           </table>

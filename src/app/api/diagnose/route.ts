@@ -11,8 +11,8 @@ import {
 } from "@/lib/diagnoseRubric";
 import { evaluateDiagnosisWithAI } from "@/lib/packageGenerator";
 import { reportServerError } from "@/lib/alerts";
-
 import { recordFreeEndpointCall } from "@/lib/freeMetrics";
+import { resolveVerifiedJobContext } from "@/lib/jobContext";
 
 export const maxDuration = 120;
 
@@ -82,14 +82,20 @@ export async function POST(req: Request) {
     }
 
     const genAI = new GoogleGenerativeAI(apiKey);
+    const jobContext = await resolveVerifiedJobContext(body?.sn);
+    const effectiveJobTitle =
+      jobTitle ||
+      (jobContext ? `[${jobContext.instName}] ${jobContext.title}` : "");
+
     await recordFreeEndpointCall("diagnose");
 
     const { evaluation, usedModel, durationMs } = await evaluateDiagnosisWithAI({
       genAI,
       text,
-      jobTitle,
+      jobTitle: effectiveJobTitle,
       questionPrompt,
       targetChars,
+      jobContext,
     });
 
     // 원문은 Redis/DB에 일절 저장하지 않고 즉시 진단 점수 계산 후 서버 필터링 응답만 반환
@@ -101,6 +107,18 @@ export async function POST(req: Request) {
       freeRemaining: freeReservation.remaining,
       usedModel,
       durationMs,
+      appliedJobContext: jobContext
+        ? {
+            sn: jobContext.sn,
+            instName: jobContext.instName,
+            title: jobContext.title,
+            ncsNames: jobContext.ncsNames,
+            qualificationApplied: Boolean(jobContext.qualification),
+            preferenceApplied: Boolean(
+              jobContext.preference || jobContext.preferenceCond
+            ),
+          }
+        : null,
     });
   } catch (error) {
     const restoredRemaining = freeReservation?.reserved
