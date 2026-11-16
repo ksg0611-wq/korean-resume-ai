@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import type { DailyFreeMetricsSummary } from "@/lib/freeMetrics";
 import type { AdminOrderFilter, AdminOrderSummary } from "@/lib/orders";
 import type { OrderRecord } from "@/lib/results";
 
@@ -41,6 +42,7 @@ export default function AdminOrdersClient() {
   const [searchOrderId, setSearchOrderId] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [freeMetrics, setFreeMetrics] = useState<DailyFreeMetricsSummary | null>(null);
   const [summary, setSummary] = useState<AdminOrderSummary | null>(null);
   const [orders, setOrders] = useState<AdminOrderRow[]>([]);
 
@@ -75,6 +77,7 @@ export default function AdminOrdersClient() {
       }
 
       setAuthenticatedSecret(secret);
+      setFreeMetrics(data.freeMetrics || null);
       setSummary(data.summary);
       setOrders(data.orders || []);
     } catch {
@@ -180,6 +183,7 @@ export default function AdminOrdersClient() {
                 setAuthenticatedSecret(null);
                 setSecretInput("");
                 setOrders([]);
+                setFreeMetrics(null);
                 setSummary(null);
               }}
               className="px-4 py-2 bg-white hover:bg-gray-100 border border-gray-300 text-gray-700 font-semibold text-xs rounded-lg cursor-pointer"
@@ -188,6 +192,78 @@ export default function AdminOrdersClient() {
             </button>
           </div>
         </div>
+
+        {/* 오늘(KST) 무료 AI 경로 일일 호출 수 및 추정 원가 + 서킷 브레이커 상태 */}
+        {freeMetrics && (
+          <section className="bg-white p-5 rounded-2xl border border-gray-200 shadow-xs space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 pb-3">
+              <div>
+                <h2 className="text-sm sm:text-base font-extrabold text-gray-900">
+                  오늘의 무료 경로 일일 호출 · 추정 원가 ({freeMetrics.date} KST)
+                </h2>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Redis 키 <code className="bg-gray-100 px-1 py-0.5 rounded">metrics:free:{freeMetrics.date}:*</code> 집계 기준 · 2027.01+ 정식 단가 환산 추정치
+                </p>
+              </div>
+              <span
+                className={`text-xs font-bold px-3 py-1.5 rounded-full border ${
+                  freeMetrics.circuitBreakerOpen
+                    ? "bg-red-50 text-red-700 border-red-200"
+                    : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                }`}
+              >
+                {freeMetrics.circuitBreakerOpen
+                  ? `서킷 브레이커 작동 (${freeMetrics.limit}회 초과 · 3.8-flash 전환)`
+                  : `서킷 브레이커 정상 (${freeMetrics.counts.draft}/${freeMetrics.limit}회)`}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200">
+                <p className="text-xs text-slate-600 font-semibold">무료 자소서 진단 (3.8-flash)</p>
+                <p className="text-xl font-extrabold text-slate-900 mt-1">
+                  {freeMetrics.counts.diagnose.toLocaleString("ko-KR")}회
+                </p>
+                <p className="text-xs text-slate-500 mt-1">
+                  추정 원가 약 {Math.round(freeMetrics.estimatedCostKrw.diagnose).toLocaleString("ko-KR")}원
+                </p>
+              </div>
+
+              <div className="bg-blue-50 p-3.5 rounded-xl border border-blue-200">
+                <p className="text-xs text-blue-800 font-semibold">무료 미리보기 (draft)</p>
+                <p className="text-xl font-extrabold text-blue-950 mt-1">
+                  {freeMetrics.counts.draft.toLocaleString("ko-KR")} / {freeMetrics.limit}회
+                </p>
+                <p className="text-xs text-blue-700 mt-1">
+                  4-hydrogen {freeMetrics.counts.draftHydrogen} · 전환 {freeMetrics.counts.draftFallback} · 약{" "}
+                  {Math.round(freeMetrics.estimatedCostKrw.draft).toLocaleString("ko-KR")}원
+                </p>
+              </div>
+
+              <div className="bg-indigo-50 p-3.5 rounded-xl border border-indigo-200">
+                <p className="text-xs text-indigo-800 font-semibold">무료 면접 체험 (3.8-flash)</p>
+                <p className="text-xl font-extrabold text-indigo-950 mt-1">
+                  생성 {freeMetrics.counts.interviewGen.toLocaleString("ko-KR")} · 채점{" "}
+                  {freeMetrics.counts.interviewEval.toLocaleString("ko-KR")}
+                </p>
+                <p className="text-xs text-indigo-700 mt-1">
+                  추정 원가 약 {Math.round(freeMetrics.estimatedCostKrw.interview).toLocaleString("ko-KR")}원
+                </p>
+              </div>
+
+              <div className="bg-emerald-50 p-3.5 rounded-xl border border-emerald-200">
+                <p className="text-xs text-emerald-800 font-semibold">오늘 무료 총 추정 원가</p>
+                <p className="text-xl font-extrabold text-emerald-900 mt-1">
+                  약 {Math.round(freeMetrics.estimatedCostKrw.total).toLocaleString("ko-KR")}원
+                </p>
+                <p className="text-xs text-emerald-700 mt-1">
+                  총 {freeMetrics.counts.totalCalls.toLocaleString("ko-KR")}회 호출
+                  {freeMetrics.alertedAt ? ` · 알림 ${fmtTime(freeMetrics.alertedAt)}` : ""}
+                </p>
+              </div>
+            </div>
+          </section>
+        )}
 
         {/* 요약 카드 */}
         {summary && (

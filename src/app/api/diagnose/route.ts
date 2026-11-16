@@ -12,7 +12,9 @@ import {
 import { evaluateDiagnosisWithAI } from "@/lib/packageGenerator";
 import { reportServerError } from "@/lib/alerts";
 
-export const maxDuration = 60;
+import { recordFreeEndpointCall } from "@/lib/freeMetrics";
+
+export const maxDuration = 120;
 
 function getClientIp(req: Request): string {
   const forwarded = req.headers.get("x-forwarded-for");
@@ -80,6 +82,8 @@ export async function POST(req: Request) {
     }
 
     const genAI = new GoogleGenerativeAI(apiKey);
+    await recordFreeEndpointCall("diagnose");
+
     const { evaluation, usedModel, durationMs } = await evaluateDiagnosisWithAI({
       genAI,
       text,

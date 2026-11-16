@@ -345,6 +345,7 @@ export async function generateFourQuestionsResume(options: {
   jobTitle: string;
   memo: string;
   revisionWeaknesses?: string[];
+  preferredModel?: string;
   perAttemptTimeoutMs?: number;
   fallbackAttemptTimeoutMs?: number;
   totalBudgetMs?: number;
@@ -366,6 +367,7 @@ export async function generateFourQuestionsResume(options: {
     jobTitle,
     memo,
     revisionWeaknesses,
+    preferredModel,
     perAttemptTimeoutMs = 42_000,
     fallbackAttemptTimeoutMs = 12_000,
     totalBudgetMs = 54_000,
@@ -401,7 +403,7 @@ ${revisionBlock}
   const genResult = await generateContentWithFallback(
     genAI,
     prompt,
-    GEMINI_CONFIG.WRITING_MODEL,
+    preferredModel || GEMINI_CONFIG.WRITING_MODEL,
     GEMINI_CONFIG.THINKING_LEVEL,
     {
       perAttemptTimeoutMs,

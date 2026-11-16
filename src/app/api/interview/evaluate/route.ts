@@ -19,7 +19,9 @@ import {
 import { updateOrderInterviewNote } from "@/lib/orders";
 import { reportServerError } from "@/lib/alerts";
 
-export const maxDuration = 60;
+import { recordFreeEndpointCall } from "@/lib/freeMetrics";
+
+export const maxDuration = 120;
 
 export async function POST(req: Request) {
   let reservedSessionId: string | null = null;
@@ -195,6 +197,10 @@ export async function POST(req: Request) {
       lockToken: reservedLockToken,
     });
     completedCommit = true;
+
+    if (updatedSession.isFree) {
+      await recordFreeEndpointCall("interview_eval");
+    }
 
     // 5) 유료 주문인 경우 result:{orderId} 면접 대비 노트 자동 갱신 (기존 7일 TTL·토큰 보존)
     let noteUpdated = false;

@@ -21,6 +21,8 @@ function extractProvidedSecret(req: Request): string {
   return "";
 }
 
+import { getDailyFreeMetricsSummary } from "@/lib/freeMetrics";
+
 export async function GET(req: Request) {
   const configuredSecret = process.env.ADMIN_SECRET?.trim();
   if (!configuredSecret) {
@@ -52,13 +54,17 @@ export async function GET(req: Request) {
     const limit = Number.isFinite(limitParam) ? limitParam : 100;
     const orderId = url.searchParams.get("orderId");
 
-    const data = await listAdminOrders({ filter, limit, orderId });
+    const [data, freeMetrics] = await Promise.all([
+      listAdminOrders({ filter, limit, orderId }),
+      getDailyFreeMetricsSummary(),
+    ]);
     const nowMs = Date.now();
 
     return NextResponse.json(
       {
         success: true,
         filter,
+        freeMetrics,
         summary: data.summary,
         orders: data.orders.map((order) => ({
           ...order,
