@@ -107,18 +107,32 @@ export function isAdminRequestAuthorized(req: Request): boolean {
 }
 
 /**
- * 토스 테스트 키(`test_`) 사용 기간 여부 판별
- * - `live_` 키로 전환되면 별도 코드 수정 없이 즉시 false 반환 (결제 잠금 자동 해제)
+ * 토스 라이브 키(`live_`)가 정상 등록된 운영 상태인지 판별 (Fail-Closed)
+ * - `TOSS_SECRET_KEY`가 `live_`로 시작할 때만 일반 방문자에게 결제를 허용합니다.
+ * - `test_`, 미설정, 빈 값, 오타 등 그 외 모든 경우는 기본 잠금 상태로 동작합니다.
  */
-export function isTestPaymentMode(): boolean {
-  return (process.env.TOSS_SECRET_KEY || "").trim().startsWith("test_");
+export function isLivePaymentEnabled(): boolean {
+  return (process.env.TOSS_SECRET_KEY || "").trim().startsWith("live_");
 }
 
 /**
- * 테스트 결제 잠금 모드에서 비관리자 요청 차단 여부
+ * 결제 잠금 모드 활성화 여부 (Fail-Closed: `!isLivePaymentEnabled()`)
+ * - 라이브 키(`live_`)로 교체되면 별도 코드 수정 없이 즉시 false 반환 (결제 잠금 자동 해제)
+ */
+export function isPaymentLockMode(): boolean {
+  return !isLivePaymentEnabled();
+}
+
+/** @deprecated Prefer `isPaymentLockMode()` */
+export function isTestPaymentMode(): boolean {
+  return isPaymentLockMode();
+}
+
+/**
+ * Fail-Closed 결제 잠금 모드에서 비관리자 요청 차단 여부
  */
 export function isPaymentLockedForRequest(req: Request): boolean {
-  if (!isTestPaymentMode()) {
+  if (isLivePaymentEnabled()) {
     return false;
   }
   return !isAdminRequestAuthorized(req);

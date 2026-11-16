@@ -1,14 +1,15 @@
 /**
- * Test Payment Lock Verification Suite
+ * Fail-Closed Payment Lock Verification Suite
  * Tests:
  * 1. `POST /api/admin/session` verifies ADMIN_SECRET and issues `kr_admin_session` cookie
  *    with `HttpOnly; Secure; SameSite=Lax; Path=/` (plaintext ADMIN_SECRET never stored in cookie)
- * 2. When `TOSS_SECRET_KEY` starts with `test_`:
- *    - `/api/payments/prepare`, `/api/payments/success`, `/api/interview/payment` return 403 for non-admins
- *    - Same endpoints succeed (200) when authenticated via `kr_admin_session` cookie or `x-admin-secret`
- *    - Forged/tampered cookies are rejected (403)
- * 3. When `TOSS_SECRET_KEY` starts with `live_`:
- *    - Lock automatically deactivates (200 without cookie/secret)
+ * 2. Fail-Closed (`!TOSS_SECRET_KEY.startsWith("live_")`):
+ *    - When TOSS_SECRET_KEY is unset, empty/whitespace, typo/invalid prefix, OR `test_`:
+ *      · `/api/payments/prepare`, `/api/payments/success`, `/api/interview/payment` return 403 for non-admins & forged cookies
+ *      · `GET /api/admin/session` reports `livePaymentEnabled: false`, `testPaymentMode: true`
+ *      · Same payment endpoints succeed (200) when authenticated via `kr_admin_session` cookie or `x-admin-secret`
+ * 3. Live Key Auto-Unlock (`TOSS_SECRET_KEY.startsWith("live_")`):
+ *    - Lock automatically deactivates (200 without cookie/secret; `livePaymentEnabled: true`, `testPaymentMode: false`)
  */
 
 import http from "node:http";
@@ -109,7 +110,6 @@ await new Promise((r) => upstashServer.listen(0, "127.0.0.1", r));
 const upstashUrl = `http://127.0.0.1:${upstashServer.address().port}`;
 process.env.UPSTASH_REDIS_REST_URL = upstashUrl;
 process.env.UPSTASH_REDIS_REST_TOKEN = "mock_token";
-process.env.TOSS_SECRET_KEY = "test_sk_LOCK_TEST";
 process.env.ADMIN_SECRET = "lock_test_admin_secret";
 
 globalThis.fetch = async (input, init) => {
@@ -172,7 +172,9 @@ try {
   const successRoute = await jiti.import(path.resolve(process.cwd(), "src/app/api/payments/success/route.ts"));
   const ivPayRoute = await jiti.import(path.resolve(process.cwd(), "src/app/api/interview/payment/route.ts"));
 
-  // 1. Session issuance & cookie attributes
+  // 1. Session issuance & cookie attributes (even while TOSS_SECRET_KEY is unset)
+  delete process.env.TOSS_SECRET_KEY;
+
   const badLoginRes = await sessionRoute.POST(
     new Request("http://localhost:3000/api/admin/session", {
       method: "POST",
@@ -190,6 +192,10 @@ try {
     })
   );
   assert.equal(loginRes.status, 200);
+  const loginJson = await loginRes.json();
+  assert.equal(loginJson.livePaymentEnabled, false);
+  assert.equal(loginJson.testPaymentMode, true);
+
   const setCookie = loginRes.headers.get("set-cookie") || "";
   assert.ok(setCookie.includes("kr_admin_session="), "Must set kr_admin_session cookie");
   assert.ok(setCookie.includes("HttpOnly"), "Cookie must be HttpOnly");
@@ -200,7 +206,6 @@ try {
 
   const cookiePair = setCookie.split(";")[0];
 
-  // Cookie authenticates /api/admin/orders without header
   const ordersCookieRes = await adminOrdersRoute.GET(
     new Request("http://localhost:3000/api/admin/orders", {
       headers: { cookie: cookiePair },
@@ -208,20 +213,65 @@ try {
   );
   assert.equal(ordersCookieRes.status, 200);
   const ordersJson = await ordersCookieRes.json();
+  assert.equal(ordersJson.livePaymentEnabled, false);
   assert.equal(ordersJson.testPaymentMode, true);
-  console.log("PASS 1: /api/admin/session issues HttpOnly; Secure; SameSite=Lax; Path=/ cookie and unlocks /api/admin/orders");
+  console.log("PASS 1: /api/admin/session issues HttpOnly; Secure; SameSite=Lax; Path=/ cookie cleanly");
 
-  // 2. Under test_ key, non-admin requests to prepare, success, interview/payment are blocked (403)
-  const unauthPrepare = await prepareRoute.POST(
-    new Request("http://localhost:3000/api/payments/prepare", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ orderId: "ord_unauth_1", planType: "resume_single" }),
-    })
-  );
-  assert.equal(unauthPrepare.status, 403);
-  assert.equal((await unauthPrepare.json()).code, "TEST_PAYMENT_LOCKED");
+  // 2. Fail-Closed matrix: unset, empty, whitespace, typo, and test_ MUST ALL return 403 for non-admins
+  const lockedKeyVariants = [
+    { label: "unset", val: undefined },
+    { label: "empty", val: "" },
+    { label: "whitespace", val: "   " },
+    { label: "typo_prefix", val: "lve_sk_typo" },
+    { label: "wrong_prefix", val: "sk_live_typo" },
+    { label: "test_key", val: "test_sk_LOCK_TEST" },
+  ];
 
+  for (const variant of lockedKeyVariants) {
+    if (variant.val === undefined) delete process.env.TOSS_SECRET_KEY;
+    else process.env.TOSS_SECRET_KEY = variant.val;
+
+    const prepUnauth = await prepareRoute.POST(
+      new Request("http://localhost:3000/api/payments/prepare", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId: `ord_${variant.label}`, planType: "resume_single" }),
+      })
+    );
+    assert.equal(prepUnauth.status, 403, `${variant.label}: prepare without cookie must be 403`);
+    assert.equal((await prepUnauth.json()).code, "TEST_PAYMENT_LOCKED");
+
+    const succUnauth = await successRoute.POST(
+      new Request("http://localhost:3000/api/payments/success", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId: `ord_${variant.label}`, paymentKey: "pk_1", amount: 4900 }),
+      })
+    );
+    assert.equal(succUnauth.status, 403, `${variant.label}: payments/success without cookie must be 403`);
+
+    const ivUnauth = await ivPayRoute.POST(
+      new Request("http://localhost:3000/api/interview/payment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId: `int_${variant.label}`, paymentKey: "pk_2", amount: 4900 }),
+      })
+    );
+    assert.equal(ivUnauth.status, 403, `${variant.label}: interview/payment without cookie must be 403`);
+
+    // Admin cookie bypasses lock on /api/payments/prepare even when key is unset/test_
+    const prepAdmin = await prepareRoute.POST(
+      new Request("http://localhost:3000/api/payments/prepare", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", cookie: cookiePair },
+        body: JSON.stringify({ orderId: `ord_admin_${variant.label}`, planType: "resume_single" }),
+      })
+    );
+    assert.equal(prepAdmin.status, 200, `${variant.label}: prepare WITH admin cookie must be 200`);
+  }
+
+  // Also test forged cookie rejection under test_ key
+  process.env.TOSS_SECRET_KEY = "test_sk_LOCK_TEST";
   const forgedCookiePrepare = await prepareRoute.POST(
     new Request("http://localhost:3000/api/payments/prepare", {
       method: "POST",
@@ -233,43 +283,15 @@ try {
     })
   );
   assert.equal(forgedCookiePrepare.status, 403);
+  console.log("PASS 2: Fail-Closed verified across unset, empty, whitespace, typo, test_, and forged cookie (403 -> admin 200)");
 
-  const unauthSuccess = await successRoute.POST(
-    new Request("http://localhost:3000/api/payments/success", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ orderId: "ord_unauth_1", paymentKey: "pk_1", amount: 4900 }),
-    })
-  );
-  assert.equal(unauthSuccess.status, 403);
-
-  const unauthIvPay = await ivPayRoute.POST(
-    new Request("http://localhost:3000/api/interview/payment", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ orderId: "int_unauth_1", paymentKey: "pk_2", amount: 4900 }),
-    })
-  );
-  assert.equal(unauthIvPay.status, 403);
-  console.log("PASS 2: Non-admin & forged-cookie payment requests blocked with 403 under test_ key");
-
-  // 3. Under test_ key, admin cookie allows prepare, success, and interview/payment (200)
-  const adminPrepare = await prepareRoute.POST(
-    new Request("http://localhost:3000/api/payments/prepare", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", cookie: cookiePair },
-      body: JSON.stringify({ orderId: "ord_admin_1", planType: "resume_single" }),
-    })
-  );
-  assert.equal(adminPrepare.status, 200);
-  assert.equal((await adminPrepare.json()).prepared, true);
-
+  // 3. Admin cookie permits payments/success and interview/payment under test_ key (200)
   const adminSuccess = await successRoute.POST(
     new Request("http://localhost:3000/api/payments/success", {
       method: "POST",
       headers: { "Content-Type": "application/json", cookie: cookiePair },
       body: JSON.stringify({
-        orderId: "ord_admin_1",
+        orderId: "ord_admin_test_key",
         paymentKey: "pk_admin_1",
         amount: 4900,
         planType: "resume_single",
@@ -283,7 +305,7 @@ try {
       method: "POST",
       headers: { "Content-Type": "application/json", cookie: cookiePair },
       body: JSON.stringify({
-        orderId: "int_admin_1",
+        orderId: "int_admin_test_key",
         paymentKey: "pk_admin_2",
         amount: 4900,
         planType: "interview_single",
@@ -291,10 +313,15 @@ try {
     })
   );
   assert.equal(adminIvPay.status, 200);
-  console.log("PASS 3: Admin cookie permits prepare, payments/success, and interview/payment (200) under test_ key");
+  console.log("PASS 3: Admin cookie permits payments/success and interview/payment (200) under test_ key");
 
   // 4. Switching TOSS_SECRET_KEY to live_ automatically removes the lock without code changes
   process.env.TOSS_SECRET_KEY = "live_sk_REAL_PRODUCTION";
+  const sessionStatusRes = await sessionRoute.GET(new Request("http://localhost:3000/api/admin/session"));
+  const sessionStatusJson = await sessionStatusRes.json();
+  assert.equal(sessionStatusJson.livePaymentEnabled, true);
+  assert.equal(sessionStatusJson.testPaymentMode, false);
+
   const livePrepare = await prepareRoute.POST(
     new Request("http://localhost:3000/api/payments/prepare", {
       method: "POST",
@@ -304,9 +331,9 @@ try {
   );
   assert.equal(livePrepare.status, 200);
   assert.equal((await livePrepare.json()).prepared, true);
-  console.log("PASS 4: Switching TOSS_SECRET_KEY to live_* automatically disables payment lock (200)");
+  console.log("PASS 4: Switching TOSS_SECRET_KEY to live_* automatically unlocks general visitor payments (200)");
 
-  console.log("\nALL TEST PAYMENT LOCK CHECKS PASSED.");
+  console.log("\nALL FAIL-CLOSED PAYMENT LOCK CHECKS PASSED.");
 } finally {
   upstashServer.closeAllConnections?.();
   upstashServer.close();

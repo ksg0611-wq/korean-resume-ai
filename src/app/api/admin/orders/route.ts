@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import {
   getConfiguredAdminSecret,
   isAdminRequestAuthorized,
-  isTestPaymentMode,
+  isLivePaymentEnabled,
+  isPaymentLockMode,
 } from "@/lib/adminAuth";
 import {
   isOrderMismatch,
@@ -55,7 +56,8 @@ export async function GET(req: Request) {
       {
         success: true,
         filter,
-        testPaymentMode: isTestPaymentMode(),
+        livePaymentEnabled: isLivePaymentEnabled(),
+        testPaymentMode: isPaymentLockMode(),
         freeMetrics,
         summary: data.summary,
         orders: data.orders.map((order) => ({

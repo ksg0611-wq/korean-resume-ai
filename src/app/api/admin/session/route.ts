@@ -7,7 +7,8 @@ import {
   extractProvidedAdminSecret,
   getConfiguredAdminSecret,
   isAdminRequestAuthorized,
-  isTestPaymentMode,
+  isLivePaymentEnabled,
+  isPaymentLockMode,
 } from "@/lib/adminAuth";
 
 export const dynamic = "force-dynamic";
@@ -18,7 +19,8 @@ export async function GET(req: Request) {
   return NextResponse.json(
     {
       authenticated: isAdminRequestAuthorized(req),
-      testPaymentMode: isTestPaymentMode(),
+      livePaymentEnabled: isLivePaymentEnabled(),
+      testPaymentMode: isPaymentLockMode(),
     },
     { headers: NO_STORE_HEADERS }
   );
@@ -64,7 +66,8 @@ export async function POST(req: Request) {
     {
       success: true,
       authenticated: true,
-      testPaymentMode: isTestPaymentMode(),
+      livePaymentEnabled: isLivePaymentEnabled(),
+      testPaymentMode: isPaymentLockMode(),
     },
     { status: 200, headers: NO_STORE_HEADERS }
   );
@@ -85,7 +88,8 @@ export async function DELETE() {
     {
       success: true,
       authenticated: false,
-      testPaymentMode: isTestPaymentMode(),
+      livePaymentEnabled: isLivePaymentEnabled(),
+      testPaymentMode: isPaymentLockMode(),
     },
     { status: 200, headers: NO_STORE_HEADERS }
   );

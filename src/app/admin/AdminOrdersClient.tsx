@@ -265,8 +265,8 @@ export default function AdminOrdersClient() {
           <div className="space-y-0.5">
             <p className="font-bold">
               {testPaymentMode
-                ? "관리자 세션 쿠키 활성화됨 (테스트 결제 잠금 모드 · 일반 방문자 차단 중)"
-                : "관리자 세션 쿠키 활성화됨 (라이브 결제 모드)"}
+                ? "결제 잠금 모드 활성화됨 (live_ 키 미설정 · 일반 방문자 차단 중)"
+                : "관리자 세션 쿠키 활성화됨 (live_ 라이브 결제 모드)"}
             </p>
             <p className="opacity-85">
               현재 브라우저(모바일·카카오톡 인앱 포함)에서 일반 사용자에게 숨겨진 결제창·API 테스트가 가능합니다.
