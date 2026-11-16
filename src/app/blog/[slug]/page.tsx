@@ -175,11 +175,17 @@ export default function BlogPost({ params }: { params: { slug: string } }) {
       {/* 💡 핵심: 수익 전환 CTA (메인화면으로 유도) */}
       {/* 광고와 명확히 분리되도록 상단 여백(mb-24 in article)과 디자인을 차별화함 */}
       <div className="bg-gradient-to-br from-blue-50 to-indigo-50 p-8 rounded-2xl text-center border border-blue-100 shadow-sm mt-auto">
-        <h3 className="text-2xl font-bold text-gray-900 mb-3">이론은 끝났습니다. 이제 실전입니다!</h3>
-        <p className="text-gray-600 mb-8">
-          방금 읽으신 완벽한 구조가 적용된 자소서 초안을 AI가 1분 만에 알아서 작성해 드립니다. 
-          백지에서 시작하지 마세요.
-        </p>
+        {post.ctaDescription ? (
+          <p className="text-gray-700 font-medium mb-6">{post.ctaDescription}</p>
+        ) : (
+          <>
+            <h3 className="text-2xl font-bold text-gray-900 mb-3">이론은 끝났습니다. 이제 실전입니다!</h3>
+            <p className="text-gray-600 mb-8">
+              방금 읽으신 완벽한 구조가 적용된 자소서 초안을 AI가 1분 만에 알아서 작성해 드립니다. 
+              백지에서 시작하지 마세요.
+            </p>
+          </>
+        )}
         <Link href={post.ctaTarget || "/"} className="inline-block bg-blue-600 text-white font-bold py-4 px-10 rounded-xl hover:bg-blue-700 hover:shadow-lg transition-all duration-200 transform hover:-translate-y-1">
           {post.ctaLabel ? post.ctaLabel : '👉 AI 자소서 무료로 생성해보기'}
         </Link>

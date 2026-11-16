@@ -137,6 +137,10 @@ try {
       assert.ok(html.includes('href="/interview"'), "post3 CTA /interview");
     }
     assert.ok(html.includes(blogPosts.find((p) => p.slug === slug).ctaLabel), `${slug} CTA label`);
+    assert.ok(html.includes(blogPosts.find((p) => p.slug === slug).ctaDescription), `${slug} CTA description`);
+    for (const banned of ["이론은 끝났습니다", "완벽한 구조", "1분 만에", "알아서 작성"]) {
+      assert.ok(!html.includes(banned), `${slug} must not contain legacy CTA phrase: ${banned}`);
+    }
   }
 
   // STAR 글 하단 링크

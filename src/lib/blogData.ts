@@ -7,6 +7,8 @@ export interface BlogPost {
   ctaTarget?: string;
   /** 하단 CTA 버튼 문구 (미지정 시 기본 문구) */
   ctaLabel?: string;
+  /** 하단 CTA 안내 문단 (지정 시 공용 제목·문단 대신 이 문단만 표시) */
+  ctaDescription?: string;
   /** 'markdown': 소제목·표·인용문·목록 렌더링 + Article/FAQPage JSON-LD 적용 (미지정 시 기존 일반 텍스트) */
   format?: 'markdown';
   /** 본문 문구는 수정하지 않고, 해당 문구(첫 등장 1회)에만 내부 링크를 연결 */
@@ -358,6 +360,7 @@ export const blogPosts: BlogPost[] = [
 **실수로 한 군데 들어갔으면 어떻게 되나요?** 기관마다 다릅니다. 그래서 제출 전에 점검하는 것 말고는 방법이 없습니다. 작성을 마쳤다면 위 체크리스트로 한 번 더 확인해 보세요.`,
     date: '2026-11-16',
     ctaTarget: '/',
+    ctaDescription: '내 자소서에 블라인드 위반 표현이 있는지 무료 진단으로 먼저 확인해 보세요.',
     ctaLabel: '내 자소서에 블라인드 위반 표현이 있는지 무료 진단으로 확인하기',
     format: 'markdown',
   },
@@ -440,6 +443,7 @@ export const blogPosts: BlogPost[] = [
 **글자수가 부족할 때는 무엇을 늘리나요?** 상황 설명이 아니라 행동을 늘리세요. 무엇을 보고 그렇게 판단했는지, 어떤 순서로 진행했는지를 더하면 분량과 설득력이 함께 늘어납니다.`,
     date: '2026-11-16',
     ctaTarget: '/',
+    ctaDescription: '문항을 입력하면 유형에 맞춘 자소서 초안을 만들어 볼 수 있습니다.',
     ctaLabel: '문항에 맞춘 자소서 초안 만들어 보기',
     format: 'markdown',
     internalLinks: [
@@ -514,6 +518,7 @@ export const blogPosts: BlogPost[] = [
 **모르는 질문이 나오면 어떻게 하나요?** 잠시 생각할 시간을 구해도 됩니다. 서둘러 말한 답변보다, 기준을 정리하고 말한 답변이 낫습니다.`,
     date: '2026-11-16',
     ctaTarget: '/interview',
+    ctaDescription: '내 답변을 입력하면 채점과 꼬리질문까지 연습해 볼 수 있습니다.',
     ctaLabel: '내 답변을 채점받고 꼬리질문까지 연습하기',
     format: 'markdown',
     internalLinks: [
