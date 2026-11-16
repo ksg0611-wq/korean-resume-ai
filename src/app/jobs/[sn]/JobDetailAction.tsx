@@ -2,6 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
+import { trackConversionEvent } from '@/lib/analytics';
 
 interface JobDetailActionProps {
   sn: number;
@@ -41,6 +42,13 @@ export default function JobDetailAction({
         {/* AI 자소서 작성하기 — 팝업 없이 해당 공고(sn) 맞춤 홈으로 즉시 이동 */}
         <Link
           href={`/?sn=${encodeURIComponent(String(sn))}`}
+          onClick={() =>
+            trackConversionEvent({
+              event: 'job_cta_click',
+              source: 'jobs',
+              planType: 'resume_single',
+            })
+          }
           className="flex-1 py-3.5 px-6 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2"
         >
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -57,6 +65,13 @@ export default function JobDetailAction({
         {/* 이 공고 맞춤 모의면접 준비 CTA */}
         <Link
           href={`/interview?sn=${encodeURIComponent(String(sn))}`}
+          onClick={() =>
+            trackConversionEvent({
+              event: 'job_cta_click',
+              source: 'jobs',
+              planType: 'interview_single',
+            })
+          }
           className="py-3.5 px-5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-sm transition-colors text-center flex items-center justify-center gap-1.5"
         >
           <span>이 공고 면접 준비 →</span>

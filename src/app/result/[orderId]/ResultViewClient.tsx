@@ -5,7 +5,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import PaidResultShareCard from "@/components/PaidResultShareCard";
 import PackageResultTabs from "@/components/PackageResultTabs";
-import { INTERVIEW_MAX_EVALUATIONS } from "@/lib/policy";
+import { AI_DRAFT_REVIEW_NOTICE, INTERVIEW_MAX_EVALUATIONS } from "@/lib/policy";
 import type {
   InterviewPrepNote,
   InterviewQuestionItem,
@@ -185,6 +185,10 @@ export default function ResultViewClient({
           }
           kakaoChannelUrl={kakaoChannelUrl}
         />
+
+        <div className="mb-5 p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs font-semibold text-amber-900">
+          ※ 안내: {AI_DRAFT_REVIEW_NOTICE}
+        </div>
 
         {/* 면접 주문인 경우 상단에도 '이어서 모의면접 연습하기' CTA 제공 */}
         {serviceType === "interview" && interviewSessionId && (

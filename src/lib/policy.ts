@@ -94,6 +94,17 @@ export const PAID_INTERVIEW_BENEFIT_TEXT = `공공기관 NCS 15문항 + ${INTERV
 export const REFUND_SUMMARY_TEXT =
   "최초 생성 실패 시 자동 전액 환불, 면접 질문만 실패 시 무료 재시도";
 
+/** AI 생성물 고지 문구 (웹 결과, .txt 다운로드, 결과 안내 이메일 공용 단일 기준) */
+export const AI_DRAFT_REVIEW_NOTICE =
+  "AI가 생성한 초안이며 제출 전 본인 검토가 필요합니다";
+
+export function withAiDraftNoticeText(content: string): string {
+  const trimmed = (content || "").trim();
+  if (!trimmed) return content;
+  if (trimmed.includes(AI_DRAFT_REVIEW_NOTICE)) return trimmed;
+  return `※ 안내: ${AI_DRAFT_REVIEW_NOTICE}\n\n${trimmed}`;
+}
+
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function normalizeEmail(input: unknown): string | null {

@@ -1,5 +1,5 @@
 import { BUSINESS_INFO, SITE_URL } from "@/lib/siteConfig";
-import { RESULT_TTL_DAYS } from "@/lib/policy";
+import { AI_DRAFT_REVIEW_NOTICE, RESULT_TTL_DAYS } from "@/lib/policy";
 import { reportServerError, sanitizeErrorText } from "@/lib/alerts";
 import type { ServiceType } from "@/lib/results";
 
@@ -88,6 +88,9 @@ export async function sendResultEmail(options: {
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; color: #1f2937; line-height: 1.6;">
       <h2 style="color: #1d4ed8; margin-bottom: 12px;">${BUSINESS_INFO.serviceName} 생성 완료 안내</h2>
       <p>결제하신 <strong>${escapeHtml(serviceLabel)}</strong> 생성이 완료되었습니다.</p>
+      <div style="background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 10px 14px; margin: 12px 0; font-size: 13px; color: #92400e;">
+        ※ 안내: ${escapeHtml(AI_DRAFT_REVIEW_NOTICE)}
+      </div>
       <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 10px; padding: 16px; margin: 16px 0;">
         <p style="margin: 0 0 8px 0; font-weight: bold; color: #1e3a8a;">${RESULT_TTL_DAYS}일간 열람 가능하니 링크를 저장하세요</p>
         <p style="margin: 0 0 12px 0; font-size: 13px; color: #475569;">주문번호: <code>${safeOrderId}</code> · 열람 만료: ${safeExpiresKst} (KST)</p>
@@ -111,6 +114,7 @@ export async function sendResultEmail(options: {
 
   const text = [
     `[${BUSINESS_INFO.serviceName}] ${serviceLabel} 생성 완료 안내`,
+    `※ 안내: ${AI_DRAFT_REVIEW_NOTICE}`,
     `주문번호: ${orderId}`,
     `${RESULT_TTL_DAYS}일간 열람 가능하니 링크를 저장하세요 (만료: ${expiresKst} KST)`,
     `재열람 링크: ${fullResultUrl}`,

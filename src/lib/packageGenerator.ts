@@ -594,6 +594,7 @@ export function formatFullPackageText(options: {
   interviewQuestions: InterviewQuestionItem[];
 }): string {
   const { jobTitle, items, interviewQuestions } = options;
+  const noticeLine = `※ 안내: AI가 생성한 초안이며 제출 전 본인 검토가 필요합니다\n\n`;
   const header = jobTitle ? `[지원 대상] ${jobTitle}\n` : "";
 
   const resumeSection = items
@@ -614,5 +615,5 @@ export function formatFullPackageText(options: {
           .join("\n\n")
       : "";
 
-  return `${header}========================================\n[AI 자소서 4문항 완성본]\n========================================\n\n${resumeSection}${interviewSection}`.trim();
+  return `${noticeLine}${header}========================================\n[AI 자소서 4문항 완성본]\n========================================\n\n${resumeSection}${interviewSection}`.trim();
 }

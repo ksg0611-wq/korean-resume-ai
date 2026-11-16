@@ -13,6 +13,7 @@ import InterviewPreviewCard from "@/components/InterviewPreviewCard";
 import InterviewSimulatorWorkspace from "@/components/InterviewSimulatorWorkspace";
 import FAQAccordion from "@/components/FAQAccordion";
 import {
+  AI_DRAFT_REVIEW_NOTICE,
   DEFAULT_INTERVIEW_JOB_CATEGORY,
   FREE_LIMITS,
   INTERVIEW_MAX_EVALUATIONS,
@@ -23,6 +24,10 @@ import {
   freeLimitExceededMessage,
   normalizeEmail,
 } from "@/lib/policy";
+import {
+  getSessionAnalyticsSource,
+  trackConversionEvent,
+} from "@/lib/analytics";
 import { INTERVIEW_JOB_CATEGORIES } from "@/lib/interviewRubric";
 import type {
   InterviewJobContext,
@@ -53,6 +58,7 @@ interface PaidResultInfo {
 function buildClientNoteSummaryText(session: InterviewSessionRecord): string {
   const lines: string[] = [
     `공공기관 AI 면접 시뮬레이터 대비 노트 (${session.jobCategory})`,
+    `※ 안내: ${AI_DRAFT_REVIEW_NOTICE}`,
     `총 ${session.questions.length}문항 · 채점 사용: ${session.usedEvaluations}/${session.maxEvaluations}회`,
     "",
   ];
@@ -507,6 +513,7 @@ function InterviewContent({
       const isUpgrade = Boolean(upgradeContext?.eligible && upgradeContext.baseOrderId);
       const selectedPlanType = isUpgrade ? "interview_upgrade" : "interview_single";
 
+      const analyticsSource = getSessionAnalyticsSource();
       localStorage.setItem("lastCustomerEmail", cleanEmail);
       localStorage.setItem(`orderEmail:${orderId}`, cleanEmail);
       localStorage.setItem("interviewJobCategory", jobCategory);
@@ -514,6 +521,7 @@ function InterviewContent({
         `paymentCheckoutMeta:${orderId}`,
         JSON.stringify({
           planType: selectedPlanType,
+          analyticsSource,
           ...(isUpgrade
             ? {
                 baseOrderId: upgradeContext!.baseOrderId,
@@ -522,6 +530,12 @@ function InterviewContent({
             : {}),
         })
       );
+
+      trackConversionEvent({
+        event: "checkout_click",
+        source: analyticsSource,
+        planType: selectedPlanType,
+      });
 
       // 결제창 호출 직전 서버 의도 등록 (+3,000원 업그레이드인 경우 자격·1회 제한 사전 검증)
       const prepareRes = await fetch("/api/payments/prepare", {
@@ -542,6 +556,11 @@ function InterviewContent({
       if (!prepareRes.ok) {
         const prepErr = await prepareRes.json().catch(() => null);
         setPaymentState("idle");
+        trackConversionEvent({
+          event: "payment_fail",
+          source: analyticsSource,
+          planType: selectedPlanType,
+        });
         setError(
           prepErr?.error || "결제 준비 검증에 실패했습니다. 주문 상태를 확인해 주세요."
         );
@@ -560,6 +579,13 @@ function InterviewContent({
     } catch (err: any) {
       setPaymentState("idle");
       if (err.code !== "USER_CANCEL") {
+        trackConversionEvent({
+          event: "payment_fail",
+          planType:
+            upgradeContext?.eligible && upgradeContext.baseOrderId
+              ? "interview_upgrade"
+              : "interview_single",
+        });
         setError(err.message || "결제 요청 중 오류가 발생했습니다.");
       }
     }
@@ -779,6 +805,7 @@ function InterviewContent({
         }
       } else {
         setPaidResultInfo(null);
+        trackConversionEvent({ event: "interview_free_run", planType: "free" });
         localStorage.setItem(
           ACTIVE_SESSION_STORAGE_KEY,
           JSON.stringify({ sessionId: newSession.sessionId })
@@ -1085,6 +1112,10 @@ function InterviewContent({
                 />
               </div>
             )}
+
+            <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs font-semibold text-amber-900">
+              ※ 안내: {AI_DRAFT_REVIEW_NOTICE}
+            </div>
 
             <InterviewSimulatorWorkspace
               session={session}

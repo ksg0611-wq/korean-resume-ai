@@ -50,6 +50,11 @@ export default function PrivacyPage() {
                 <td className={td}>이메일 주소, 공고(기관) 일련번호</td>
                 <td className={td}>해당 기관 신규 채용공고 오픈 알림 발송</td>
               </tr>
+              <tr>
+                <td className={td}>서비스 이용·전환 분석 (비식별)</td>
+                <td className={td}>세션 유입 경로 구분(blog / jobs / direct), 선택한 상품 유형(planType), 기능 실행 및 결제 단계 이벤트명 (자소서 본문·답변·이메일·이름·IP 등 개인식별정보는 일절 포함하지 않음)</td>
+                <td className={td}>기능 이용 현황 파악, 오류 대응 및 서비스 품질 개선 (일별 집계 카운터 및 Google Analytics 4 연동 시 비식별 통계 측정)</td>
+              </tr>
             </tbody>
           </table>
         </div>
@@ -108,6 +113,11 @@ export default function PrivacyPage() {
                 <td className={td}>회사 DB (waitlist_signups)</td>
                 <td className={td}>해당 기관 신규 공고 알림 발송 목적 달성 시(기존 사전신청 건은 정식 오픈 알림 1회 발송 후)까지 보관·파기하며, 삭제 요청 시 지체 없이 삭제합니다.</td>
               </tr>
+              <tr>
+                <td className={td}>비식별 전환·이용 통계 카운터 (analytics:funnel:*)</td>
+                <td className={td}>Redis 일별 통계 카운터 (개인정보 미포함)</td>
+                <td className={td}>집계일(KST)로부터 최대 35일 보관 후 자동 파기됩니다.</td>
+              </tr>
             </tbody>
           </table>
         </div>
@@ -156,9 +166,17 @@ export default function PrivacyPage() {
                 <td className={td}>유료 결제 이용자에게 생성 결과 재열람 링크 및 결제 영수증 안내 이메일 발송 (이메일 발송 기능 연동 시)</td>
                 <td className={td}>미국</td>
               </tr>
+              <tr>
+                <td className={td}>Google LLC (Google Analytics 4)</td>
+                <td className={td}>비식별 서비스 이용 현황 및 유입경로별 전환 통계 분석 (측정 ID 연동 시, IP 익명화 적용 · 개인정보 미전송)</td>
+                <td className={td}>미국</td>
+              </tr>
             </tbody>
           </table>
         </div>
+        <p className="text-xs text-gray-600 mt-2">
+          이용자는 브라우저의 쿠키 차단 설정 또는 Google Analytics 차단 브라우저 부가기능을 통해 비식별 이용 통계 수집을 거부할 수 있습니다.
+        </p>
       </PolicySection>
 
       <PolicySection heading="4. 개인정보의 제3자 제공">

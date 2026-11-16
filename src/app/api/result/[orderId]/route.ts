@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { verifyAndGetStoredResult } from "@/lib/results";
+import { withAiDraftNoticeText } from "@/lib/policy";
 import { reportServerError, sanitizeErrorText } from "@/lib/alerts";
 
 export const dynamic = "force-dynamic";
@@ -55,7 +56,8 @@ export async function GET(
 
     if (format === "txt") {
       const safeFilename = `${result.serviceType === "interview" ? "interview" : "resume"}_${result.orderId}.txt`;
-      return new NextResponse(result.text, {
+      const downloadBody = withAiDraftNoticeText(result.text);
+      return new NextResponse(downloadBody, {
         status: 200,
         headers: {
           "Content-Type": "text/plain; charset=utf-8",

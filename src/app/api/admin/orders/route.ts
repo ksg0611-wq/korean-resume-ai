@@ -13,6 +13,7 @@ import {
 } from "@/lib/orders";
 import { reportServerError } from "@/lib/alerts";
 import { getDailyFreeMetricsSummary } from "@/lib/freeMetrics";
+import { getDailyFunnelSummary } from "@/lib/analyticsServer";
 
 export const dynamic = "force-dynamic";
 
@@ -45,10 +46,12 @@ export async function GET(req: Request) {
     const limitParam = Number(url.searchParams.get("limit") || "100");
     const limit = Number.isFinite(limitParam) ? limitParam : 100;
     const orderId = url.searchParams.get("orderId");
+    const analyticsDate = url.searchParams.get("analyticsDate");
 
-    const [data, freeMetrics] = await Promise.all([
+    const [data, freeMetrics, analyticsFunnel] = await Promise.all([
       listAdminOrders({ filter, limit, orderId }),
       getDailyFreeMetricsSummary(),
+      getDailyFunnelSummary(analyticsDate),
     ]);
     const nowMs = Date.now();
 
@@ -59,6 +62,7 @@ export async function GET(req: Request) {
         livePaymentEnabled: isLivePaymentEnabled(),
         testPaymentMode: isPaymentLockMode(),
         freeMetrics,
+        analyticsFunnel,
         summary: data.summary,
         orders: data.orders.map((order) => ({
           ...order,

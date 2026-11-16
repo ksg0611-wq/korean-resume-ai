@@ -646,6 +646,7 @@ export function formatInterviewNoteText(note: InterviewPrepNote): string {
   const lines: string[] = [];
   lines.push("====================================================");
   lines.push(`공공기관 AI 면접 시뮬레이터 대비 노트 (${note.jobCategory})`);
+  lines.push("※ 안내: AI가 생성한 초안이며 제출 전 본인 검토가 필요합니다");
   lines.push(
     `문항 수: 총 ${note.totalQuestions}문항 · 답변 완료: ${note.answeredCount}문항 · 채점 사용: ${note.usedEvaluations}/${note.maxEvaluations}회`
   );

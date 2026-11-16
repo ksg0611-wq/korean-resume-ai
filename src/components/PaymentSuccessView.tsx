@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { BUSINESS_INFO } from "@/lib/siteConfig";
 import { RESULT_TTL_DAYS } from "@/lib/policy";
+import { trackConversionEvent, type AnalyticsSource } from "@/lib/analytics";
 
 interface PaymentSuccessViewProps {
   /** 결제 승인 API 경로 */
@@ -80,6 +81,22 @@ export default function PaymentSuccessView({
         if (response.ok) {
           localStorage.removeItem(`paymentCheckoutMeta:${orderId}`);
           const data = await response.json().catch(() => null);
+          const resolvedPlan =
+            (typeof data?.order?.planType === "string" && data.order.planType) ||
+            (typeof checkoutMeta?.planType === "string" && checkoutMeta.planType) ||
+            "unknown";
+          const resolvedSource: AnalyticsSource | undefined =
+            checkoutMeta?.analyticsSource === "blog" ||
+            checkoutMeta?.analyticsSource === "jobs" ||
+            checkoutMeta?.analyticsSource === "direct"
+              ? checkoutMeta.analyticsSource
+              : undefined;
+          trackConversionEvent({
+            event: "payment_success",
+            source: resolvedSource,
+            planType: resolvedPlan,
+            dedupeKey: `payment_success:${orderId}`,
+          });
           const url = data?.payment?.receipt?.url;
           if (typeof url === "string" && url.startsWith("https://")) {
             setReceiptUrl(url);
@@ -90,11 +107,41 @@ export default function PaymentSuccessView({
             router.replace(`${redirectPath}?orderId=${orderId}`);
           }, REDIRECT_DELAY_MS);
         } else {
+          const resolvedPlan =
+            (typeof checkoutMeta?.planType === "string" && checkoutMeta.planType) ||
+            "unknown";
+          const resolvedSource: AnalyticsSource | undefined =
+            checkoutMeta?.analyticsSource === "blog" ||
+            checkoutMeta?.analyticsSource === "jobs" ||
+            checkoutMeta?.analyticsSource === "direct"
+              ? checkoutMeta.analyticsSource
+              : undefined;
+          trackConversionEvent({
+            event: "payment_fail",
+            source: resolvedSource,
+            planType: resolvedPlan,
+            dedupeKey: `payment_fail_confirm:${orderId}`,
+          });
           const errorData = await response.json().catch(() => null);
           setStatus(`결제 승인 실패: ${errorData?.message || "알 수 없는 오류"}`);
         }
       } catch (error) {
         console.error(error);
+        const resolvedPlan =
+          (typeof checkoutMeta?.planType === "string" && checkoutMeta.planType) ||
+          "unknown";
+        const resolvedSource: AnalyticsSource | undefined =
+          checkoutMeta?.analyticsSource === "blog" ||
+          checkoutMeta?.analyticsSource === "jobs" ||
+          checkoutMeta?.analyticsSource === "direct"
+            ? checkoutMeta.analyticsSource
+            : undefined;
+        trackConversionEvent({
+          event: "payment_fail",
+          source: resolvedSource,
+          planType: resolvedPlan,
+          dedupeKey: `payment_fail_confirm_net:${orderId}`,
+        });
         setStatus("결제 승인 요청 중 네트워크 오류가 발생했습니다.");
       }
     };

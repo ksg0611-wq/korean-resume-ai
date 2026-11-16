@@ -19,6 +19,7 @@ import type {
   ResumeQuestionItem,
 } from "@/lib/results";
 import {
+  AI_DRAFT_REVIEW_NOTICE,
   FREE_LIMITS,
   PAID_BENEFIT_TEXT,
   PAID_GENERATIONS,
@@ -30,6 +31,10 @@ import {
   freeLimitExceededMessage,
   normalizeEmail,
 } from "@/lib/policy";
+import {
+  getSessionAnalyticsSource,
+  trackConversionEvent,
+} from "@/lib/analytics";
 
 const clientKey = process.env.NEXT_PUBLIC_TOSS_CLIENT_KEY || "test_gck_EXAMPLETEST";
 const customerKey = "GUEST"; // 비회원 결제
@@ -382,6 +387,7 @@ export default function Home({
 
       setDiagnosisReport(data);
       localStorage.setItem(LS_DIAGNOSIS_REPORT, JSON.stringify(data));
+      trackConversionEvent({ event: "diagnose_run", planType: "free" });
       setTimeout(() => {
         document.getElementById("diagnosis-result-section")?.scrollIntoView({ behavior: "smooth" });
       }, 100);
@@ -440,6 +446,7 @@ export default function Home({
       setResult(data.text || "");
       setPackageItems(Array.isArray(data.items) ? data.items : []);
       setLockedItems(Array.isArray(data.lockedItems) ? data.lockedItems : []);
+      trackConversionEvent({ event: "draft_run", planType: "free" });
 
       if (data.previewToken) {
         setPreviewToken(data.previewToken);
@@ -699,6 +706,7 @@ export default function Home({
         .filter(Boolean);
 
       const selectedPlanType = includeInterviewBundle ? "bundle" : "resume_single";
+      const analyticsSource = getSessionAnalyticsSource();
 
       localStorage.setItem(
         `orderCheckout:${orderId}`,
@@ -713,8 +721,17 @@ export default function Home({
       );
       localStorage.setItem(
         `paymentCheckoutMeta:${orderId}`,
-        JSON.stringify({ planType: selectedPlanType })
+        JSON.stringify({
+          planType: selectedPlanType,
+          analyticsSource,
+        })
       );
+
+      trackConversionEvent({
+        event: "checkout_click",
+        source: analyticsSource,
+        planType: selectedPlanType,
+      });
 
       // 결제 직전 서버 payment_intent 등록 (미리보기 상태라면 previewToken 매핑·2시간 TTL 연장 동시 수행)
       await fetch("/api/payments/prepare", {
@@ -740,6 +757,10 @@ export default function Home({
     } catch (err: any) {
       setPaymentState("idle");
       if (err.code !== "USER_CANCEL") {
+        trackConversionEvent({
+          event: "payment_fail",
+          planType: includeInterviewBundle ? "bundle" : "resume_single",
+        });
         setError(err.message || "결제 요청 중 오류가 발생했습니다.");
       }
     }
@@ -1309,6 +1330,10 @@ export default function Home({
                 kakaoChannelUrl={kakaoChannelUrl}
               />
             )}
+
+            <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs font-semibold text-amber-900">
+              ※ 안내: {AI_DRAFT_REVIEW_NOTICE}
+            </div>
 
             {packageItems.length > 0 ? (
               <PackageResultTabs

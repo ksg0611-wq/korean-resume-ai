@@ -2,10 +2,11 @@
 
 import { useState } from "react";
 import { BUSINESS_INFO } from "@/lib/siteConfig";
-import { RESULT_TTL_DAYS } from "@/lib/policy";
+import { RESULT_TTL_DAYS, withAiDraftNoticeText } from "@/lib/policy";
 
 export function downloadTextFile(filename: string, content: string): void {
-  const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+  const normalizedContent = withAiDraftNoticeText(content);
+  const blob = new Blob([normalizedContent], { type: "text/plain;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;

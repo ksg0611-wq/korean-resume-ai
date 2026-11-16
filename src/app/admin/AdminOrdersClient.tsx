@@ -3,8 +3,20 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { DailyFreeMetricsSummary } from "@/lib/freeMetrics";
+import type { DailyFunnelSummary } from "@/lib/analyticsServer";
+import type { AnalyticsEventName } from "@/lib/analytics";
 import type { AdminOrderFilter, AdminOrderSummary } from "@/lib/orders";
 import type { OrderRecord } from "@/lib/results";
+
+const FUNNEL_EVENT_LABELS: Record<AnalyticsEventName, string> = {
+  job_cta_click: "공고 상세 CTA 클릭 (job_cta_click)",
+  diagnose_run: "무료 자소서 진단 (diagnose_run)",
+  draft_run: "무료 미리보기 생성 (draft_run)",
+  interview_free_run: "무료 면접 체험 (interview_free_run)",
+  checkout_click: "결제하기 클릭 (checkout_click)",
+  payment_success: "결제 승인 완료 (payment_success)",
+  payment_fail: "결제 실패·취소 (payment_fail)",
+};
 
 type AdminOrderRow = OrderRecord & { isMismatch?: boolean; isStuck?: boolean };
 
@@ -46,13 +58,16 @@ export default function AdminOrdersClient() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [freeMetrics, setFreeMetrics] = useState<DailyFreeMetricsSummary | null>(null);
+  const [analyticsFunnel, setAnalyticsFunnel] = useState<DailyFunnelSummary | null>(null);
+  const [analyticsDate, setAnalyticsDate] = useState("");
   const [summary, setSummary] = useState<AdminOrderSummary | null>(null);
   const [orders, setOrders] = useState<AdminOrderRow[]>([]);
 
   const fetchOrders = async (
     secret: string | null,
     nextFilter: AdminOrderFilter = filter,
-    orderIdQuery: string = searchOrderId
+    orderIdQuery: string = searchOrderId,
+    nextAnalyticsDate: string = analyticsDate
   ) => {
     setLoading(true);
     setError("");
@@ -60,6 +75,9 @@ export default function AdminOrdersClient() {
       const params = new URLSearchParams({ filter: nextFilter, limit: "150" });
       if (orderIdQuery.trim()) {
         params.set("orderId", orderIdQuery.trim());
+      }
+      if (nextAnalyticsDate.trim()) {
+        params.set("analyticsDate", nextAnalyticsDate.trim());
       }
 
       const headers: Record<string, string> = {};
@@ -90,6 +108,10 @@ export default function AdminOrdersClient() {
       setIsCookieAuthenticated(true);
       setTestPaymentMode(Boolean(data.testPaymentMode));
       setFreeMetrics(data.freeMetrics || null);
+      setAnalyticsFunnel(data.analyticsFunnel || null);
+      if (!nextAnalyticsDate && data.analyticsFunnel?.date) {
+        setAnalyticsDate(data.analyticsFunnel.date);
+      }
       setSummary(data.summary);
       setOrders(data.orders || []);
     } catch {
@@ -245,6 +267,7 @@ export default function AdminOrdersClient() {
                 setSecretInput("");
                 setOrders([]);
                 setFreeMetrics(null);
+                setAnalyticsFunnel(null);
                 setSummary(null);
               }}
               className="px-4 py-2 bg-white hover:bg-gray-100 border border-gray-300 text-gray-700 font-semibold text-xs rounded-lg cursor-pointer"
@@ -356,6 +379,118 @@ export default function AdminOrdersClient() {
                   {freeMetrics.alertedAt ? ` · 알림 ${fmtTime(freeMetrics.alertedAt)}` : ""}
                 </p>
               </div>
+            </div>
+          </section>
+        )}
+
+        {/* 전환 퍼널 일별 · 유입경로별 집계 (analytics:funnel:YYYY-MM-DD:*) */}
+        {analyticsFunnel && (
+          <section className="bg-white p-5 rounded-2xl border border-gray-200 shadow-xs space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 pb-3">
+              <div>
+                <h2 className="text-sm sm:text-base font-extrabold text-gray-900">
+                  전환 퍼널 일별 · 유입경로별 집계 ({analyticsFunnel.date} KST)
+                </h2>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Redis 비식별 카운터 <code className="bg-gray-100 px-1 py-0.5 rounded">{analyticsFunnel.redisKeyPattern}</code> · 개인정보 미수집
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <input
+                  type="date"
+                  value={analyticsDate || analyticsFunnel.date}
+                  onChange={(e) => {
+                    const nextDate = e.target.value;
+                    setAnalyticsDate(nextDate);
+                    if (isCookieAuthenticated || authenticatedSecret) {
+                      fetchOrders(authenticatedSecret, filter, searchOrderId, nextDate);
+                    }
+                  }}
+                  className="px-2.5 py-1.5 border border-gray-300 rounded-lg text-xs"
+                  aria-label="퍼널 조회 일자"
+                />
+                <span className="px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 font-semibold border border-slate-200">
+                  체험→결제시도{" "}
+                  {analyticsFunnel.conversionRates.draftToCheckoutPct !== null
+                    ? `${analyticsFunnel.conversionRates.draftToCheckoutPct}%`
+                    : "-"}
+                </span>
+                <span className="px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 font-semibold border border-emerald-200">
+                  결제시도→성공{" "}
+                  {analyticsFunnel.conversionRates.checkoutToSuccessPct !== null
+                    ? `${analyticsFunnel.conversionRates.checkoutToSuccessPct}%`
+                    : "-"}
+                </span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2.5 text-xs">
+              <div className="bg-gray-50 p-3 rounded-xl border border-gray-200">
+                <p className="text-gray-500 font-semibold">direct 유입 이벤트</p>
+                <p className="text-lg font-extrabold text-gray-900 mt-0.5">
+                  {analyticsFunnel.totalsBySource.direct.toLocaleString("ko-KR")}건
+                </p>
+              </div>
+              <div className="bg-blue-50 p-3 rounded-xl border border-blue-200">
+                <p className="text-blue-700 font-semibold">jobs(채용공고) 유입 이벤트</p>
+                <p className="text-lg font-extrabold text-blue-950 mt-0.5">
+                  {analyticsFunnel.totalsBySource.jobs.toLocaleString("ko-KR")}건
+                </p>
+              </div>
+              <div className="bg-indigo-50 p-3 rounded-xl border border-indigo-200">
+                <p className="text-indigo-700 font-semibold">blog(블로그) 유입 이벤트</p>
+                <p className="text-lg font-extrabold text-indigo-950 mt-0.5">
+                  {analyticsFunnel.totalsBySource.blog.toLocaleString("ko-KR")}건
+                </p>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-200 text-gray-600">
+                    <th className="py-2.5 px-3 font-bold">이벤트</th>
+                    <th className="py-2.5 px-3 font-bold text-right">합계</th>
+                    <th className="py-2.5 px-3 font-bold text-right">blog</th>
+                    <th className="py-2.5 px-3 font-bold text-right">jobs</th>
+                    <th className="py-2.5 px-3 font-bold text-right">direct</th>
+                    <th className="py-2.5 px-3 font-bold">상품별 분포 (planType)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {analyticsFunnel.rows.map((row) => {
+                    const planEntries = Object.entries(row.byPlanType).filter(
+                      ([, count]) => count > 0
+                    );
+                    return (
+                      <tr key={row.event} className="hover:bg-gray-50/70">
+                        <td className="py-2 px-3 font-semibold text-gray-900">
+                          {FUNNEL_EVENT_LABELS[row.event] || row.event}
+                        </td>
+                        <td className="py-2 px-3 text-right font-extrabold text-gray-900">
+                          {row.total.toLocaleString("ko-KR")}
+                        </td>
+                        <td className="py-2 px-3 text-right text-indigo-700 font-semibold">
+                          {row.bySource.blog.toLocaleString("ko-KR")}
+                        </td>
+                        <td className="py-2 px-3 text-right text-blue-700 font-semibold">
+                          {row.bySource.jobs.toLocaleString("ko-KR")}
+                        </td>
+                        <td className="py-2 px-3 text-right text-gray-700 font-semibold">
+                          {row.bySource.direct.toLocaleString("ko-KR")}
+                        </td>
+                        <td className="py-2 px-3 text-gray-600">
+                          {planEntries.length > 0
+                            ? planEntries
+                                .map(([plan, count]) => `${plan}:${count}`)
+                                .join(" · ")
+                            : "-"}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           </section>
         )}
