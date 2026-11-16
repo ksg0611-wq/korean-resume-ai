@@ -22,7 +22,9 @@ import {
   PAID_BENEFIT_TEXT,
   PAID_GENERATIONS,
   PAID_GENERATIONS_BREAKDOWN,
+  PAID_INTERVIEW_BREAKDOWN,
   PAID_SUB_TEXT,
+  PRICING_PLANS,
   freeLimitButtonText,
   freeLimitExceededMessage,
   normalizeEmail,
@@ -31,9 +33,12 @@ import {
 const clientKey = process.env.NEXT_PUBLIC_TOSS_CLIENT_KEY || "test_gck_EXAMPLETEST";
 const customerKey = "GUEST"; // 비회원 결제
 
-/** 서비스 결제 금액 (원). 마케팅 문구와 결제 위젯이 이 값을 공유하여 불일치를 방지합니다. */
-const PRICE = 4900;
+/** 서비스 기본 결제 금액 (원). 정책 상수(PRICING_PLANS)를 직접 참조합니다. */
+const PRICE = PRICING_PLANS.resume_single.price;
 const PRICE_DISPLAY = PRICE.toLocaleString("ko-KR"); // "4,900"
+const BUNDLE_PRICE = PRICING_PLANS.bundle.price;
+const BUNDLE_PRICE_DISPLAY = BUNDLE_PRICE.toLocaleString("ko-KR"); // "7,900"
+const UPGRADE_ADD_PRICE_DISPLAY = PRICING_PLANS.interview_upgrade.price.toLocaleString("ko-KR"); // "3,000"
 
 const LS_DIAGNOSIS_TEXT = "resumeDiagnosisDraft";
 const LS_DIAGNOSIS_REPORT = "resumeDiagnosisReport";
@@ -42,6 +47,8 @@ const LS_PREVIEW_STATE = "resumePreviewState";
 
 interface PaidResultInfo {
   orderId: string;
+  planType?: string | null;
+  linkedInterviewOrderId?: string | null;
   resultToken: string;
   resultUrl: string;
   expiresAt: string | null;
@@ -79,6 +86,7 @@ export default function Home({ kakaoChannelUrl }: { kakaoChannelUrl?: string | n
 
   const [customerEmail, setCustomerEmail] = useState("");
   const [agreedToRefundPolicy, setAgreedToRefundPolicy] = useState(false);
+  const [includeInterviewBundle, setIncludeInterviewBundle] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [result, setResult] = useState("");
   const [error, setError] = useState("");
@@ -105,9 +113,19 @@ export default function Home({ kakaoChannelUrl }: { kakaoChannelUrl?: string | n
     [diagnosisText, targetChars]
   );
 
+  const selectedPrice = includeInterviewBundle ? BUNDLE_PRICE : PRICE;
+  const selectedPriceDisplay = selectedPrice.toLocaleString("ko-KR");
+
   useEffect(() => {
     isWidgetReadyRef.current = isWidgetReady;
-  }, [isWidgetReady]);
+    if (isWidgetReady && paymentMethodsWidgetRef.current?.updateAmount) {
+      try {
+        paymentMethodsWidgetRef.current.updateAmount(selectedPrice);
+      } catch (err) {
+        console.warn("결제 위젯 금액 갱신 실패:", err);
+      }
+    }
+  }, [isWidgetReady, selectedPrice]);
 
   const initPaymentWidget = async () => {
     try {
@@ -556,6 +574,8 @@ export default function Home({ kakaoChannelUrl }: { kakaoChannelUrl?: string | n
         if (data.order.resultUrl) {
           setPaidResultInfo({
             orderId: data.order.orderId,
+            planType: data.order.planType ?? null,
+            linkedInterviewOrderId: data.order.linkedInterviewOrderId ?? null,
             resultToken: data.resultToken || "",
             resultUrl: data.order.resultUrl,
             expiresAt: data.order.resultExpiresAt ?? null,
@@ -639,28 +659,40 @@ export default function Home({ kakaoChannelUrl }: { kakaoChannelUrl?: string | n
         .map((w) => `${w.title}: ${w.description || ""}`)
         .filter(Boolean);
 
+      const selectedPlanType = includeInterviewBundle ? "bundle" : "resume_single";
+
       localStorage.setItem(
         `orderCheckout:${orderId}`,
         JSON.stringify({
           flow: inputMode,
+          planType: selectedPlanType,
           previewToken: inputMode === "draft" ? previewToken : null,
           jobTitle: selectedJobTitle.trim(),
           weaknesses: topWeaknesses,
         })
       );
+      localStorage.setItem(
+        `paymentCheckoutMeta:${orderId}`,
+        JSON.stringify({ planType: selectedPlanType })
+      );
 
-      // 미리보기 상태에서 결제 시 orderId <-> previewToken 매핑 및 2시간 TTL 연장
-      if (inputMode === "draft" && previewToken) {
-        await fetch("/api/payments/prepare", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ orderId, previewToken }),
-        }).catch(() => null);
-      }
+      // 결제 직전 서버 payment_intent 등록 (미리보기 상태라면 previewToken 매핑·2시간 TTL 연장 동시 수행)
+      await fetch("/api/payments/prepare", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          orderId,
+          planType: selectedPlanType,
+          email: cleanEmail,
+          ...(inputMode === "draft" && previewToken ? { previewToken } : {}),
+        }),
+      }).catch(() => null);
 
       await paymentWidget.requestPayment({
         orderId,
-        orderName: `AI 자소서·면접 완성 패키지 (${PAID_GENERATIONS}회권)`,
+        orderName: includeInterviewBundle
+          ? PRICING_PLANS.bundle.label
+          : `AI 자소서·면접 완성 패키지 (${PAID_GENERATIONS}회권)`,
         customerEmail: cleanEmail,
         successUrl: window.location.origin + "/payments/success",
         failUrl: window.location.origin + "/payments/fail",
@@ -1142,22 +1174,46 @@ export default function Home({ kakaoChannelUrl }: { kakaoChannelUrl?: string | n
             )}
 
             {lockedItems.length === 0 && result && (
-              <button
-                onClick={handleInterviewRedirect}
-                disabled={isRedirecting}
-                className="w-full py-4 px-6 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 disabled:bg-emerald-400 text-white font-bold text-base rounded-xl shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer"
-              >
-                {isRedirecting ? (
-                  <span>모의면접 페이지로 이동 중...</span>
-                ) : (
-                  <>
-                    <span>실전 모의면접 꼬리질문 더 연습하기</span>
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                    </svg>
-                  </>
-                )}
-              </button>
+              paidResultInfo?.linkedInterviewOrderId ? (
+                <Link
+                  href={`/interview?orderId=${encodeURIComponent(paidResultInfo.linkedInterviewOrderId)}&bundleFrom=${encodeURIComponent(paidResultInfo.orderId)}&token=${encodeURIComponent(paidResultInfo.resultToken)}`}
+                  className="w-full py-4 px-6 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-base rounded-xl shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2"
+                >
+                  <span>포함된 AI 면접 시뮬레이터(15문항·45회) 바로 시작하기</span>
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                  </svg>
+                </Link>
+              ) : paidResultInfo?.orderId && paidResultInfo?.resultToken ? (
+                <Link
+                  href={`/interview?upgradeFrom=${encodeURIComponent(paidResultInfo.orderId)}&token=${encodeURIComponent(paidResultInfo.resultToken)}`}
+                  className="w-full py-4 px-6 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-base rounded-xl shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2"
+                >
+                  <span>
+                    내 자소서로 실전 모의면접 이어하기 (+{UPGRADE_ADD_PRICE_DISPLAY}원 할인 업그레이드)
+                  </span>
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                  </svg>
+                </Link>
+              ) : (
+                <button
+                  onClick={handleInterviewRedirect}
+                  disabled={isRedirecting}
+                  className="w-full py-4 px-6 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 disabled:bg-emerald-400 text-white font-bold text-base rounded-xl shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  {isRedirecting ? (
+                    <span>모의면접 페이지로 이동 중...</span>
+                  ) : (
+                    <>
+                      <span>실전 모의면접 꼬리질문 더 연습하기</span>
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                      </svg>
+                    </>
+                  )}
+                </button>
+              )
             )}
           </section>
         )}
@@ -1165,9 +1221,24 @@ export default function Home({ kakaoChannelUrl }: { kakaoChannelUrl?: string | n
         {/* [결제 및 생성 섹션 (공통 컴포넌트)] */}
         <div id="payment-section-anchor" className="scroll-mt-20">
           <PaymentSection
-            priceDisplay={PRICE_DISPLAY}
-            title={`공고 지원 완성 패키지 결제 (${PRICE_DISPLAY}원)`}
-            subTitle={`자소서 4문항 완성본 + 맞춤 면접 질문 10선 + ${PAID_GENERATIONS_BREAKDOWN} 포함`}
+            priceDisplay={selectedPriceDisplay}
+            title={
+              includeInterviewBundle
+                ? `자소서+면접 통합 패키지 결제 (${BUNDLE_PRICE_DISPLAY}원)`
+                : `공고 지원 완성 패키지 결제 (${PRICE_DISPLAY}원)`
+            }
+            subTitle={
+              includeInterviewBundle
+                ? `자소서 4문항(${PAID_GENERATIONS_BREAKDOWN}) + 면접 시뮬레이터 (${PAID_INTERVIEW_BREAKDOWN})`
+                : `자소서 4문항 완성본 + 맞춤 면접 질문 10선 + ${PAID_GENERATIONS_BREAKDOWN} 포함`
+            }
+            bundleAddOn={{
+              checked: includeInterviewBundle,
+              onChange: setIncludeInterviewBundle,
+              badgeText: `1,900원 할인 · 합계 ${BUNDLE_PRICE_DISPLAY}원`,
+              title: `면접 연습 추가 (+${UPGRADE_ADD_PRICE_DISPLAY}원)`,
+              description: `자소서 기반 공공기관 면접 시뮬레이터(직무 10+인성 5 = 총 15문항 · 최대 45회 답변 채점·꼬리질문 · 7일 대비 노트)를 함께 이용합니다.`,
+            }}
             customerEmail={customerEmail}
             onCustomerEmailChange={(v) => {
               setCustomerEmail(v);
@@ -1177,7 +1248,11 @@ export default function Home({ kakaoChannelUrl }: { kakaoChannelUrl?: string | n
             agreedToRefundPolicy={agreedToRefundPolicy}
             onAgreedChange={setAgreedToRefundPolicy}
             refundCheckboxId="refund-agree"
-            guaranteeBenefitText={PAID_BENEFIT_TEXT}
+            guaranteeBenefitText={
+              includeInterviewBundle
+                ? `${PAID_BENEFIT_TEXT} + 면접 시뮬레이터 15문항·45회 통합 제공`
+                : PAID_BENEFIT_TEXT
+            }
             error={error}
             refundNotice={refundNotice}
             refundPendingNotice={refundPendingNotice}
@@ -1194,13 +1269,19 @@ export default function Home({ kakaoChannelUrl }: { kakaoChannelUrl?: string | n
             onRetryPayment={handleRetryPayment}
             onPaymentClick={handlePaymentClick}
             paidButtonText={
-              inputMode === "diagnose"
-                ? `약점을 고친 완성본 받기 (${PRICE_DISPLAY}원)`
-                : lockedItems.length > 0
-                  ? `나머지 3문항 + 면접 10선 잠금해제 (${PRICE_DISPLAY}원)`
-                  : `${PRICE_DISPLAY}원 결제하고 4문항·면접 10선 완성하기`
+              includeInterviewBundle
+                ? `${BUNDLE_PRICE_DISPLAY}원 결제하고 자소서+면접 통합 완성하기`
+                : inputMode === "diagnose"
+                  ? `약점을 고친 완성본 받기 (${PRICE_DISPLAY}원)`
+                  : lockedItems.length > 0
+                    ? `나머지 3문항 + 면접 10선 잠금해제 (${PRICE_DISPLAY}원)`
+                    : `${PRICE_DISPLAY}원 결제하고 4문항·면접 10선 완성하기`
             }
-            paidButtonSubText={PAID_SUB_TEXT}
+            paidButtonSubText={
+              includeInterviewBundle
+                ? `자소서 ${PAID_GENERATIONS_BREAKDOWN} + 면접 ${PAID_INTERVIEW_BREAKDOWN}`
+                : PAID_SUB_TEXT
+            }
             isGenerating={isGenerating || isDiagnosing}
             onFreeGenerate={() =>
               inputMode === "diagnose"

@@ -42,6 +42,13 @@ export interface PaymentSectionProps {
   agreementContainerId?: string;
   kakaoChannelUrl?: string | null;
   comparisonTable?: React.ReactNode;
+  bundleAddOn?: {
+    checked: boolean;
+    onChange: (checked: boolean) => void;
+    badgeText?: string;
+    title: string;
+    description: string;
+  };
 }
 
 export default function PaymentSection({
@@ -77,6 +84,7 @@ export default function PaymentSection({
   agreementContainerId = "agreement",
   kakaoChannelUrl,
   comparisonTable,
+  bundleAddOn,
 }: PaymentSectionProps) {
   const displayTitle = title || `결제 및 생성 (${priceDisplay}원)`;
   const displayPaidText = paidButtonText || `${priceDisplay}원 결제하고 완성하기`;
@@ -160,6 +168,39 @@ export default function PaymentSection({
             </a>
           </div>
         </div>
+      )}
+
+      {/* 선택 추가 옵션 (예: 면접 연습 +3,000원 통합 패키지) */}
+      {bundleAddOn && (
+        <label
+          className={`flex items-start gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${
+            bundleAddOn.checked
+              ? "border-emerald-500 bg-emerald-50/70 shadow-xs"
+              : "border-gray-200 bg-gray-50/70 hover:border-blue-300"
+          }`}
+        >
+          <input
+            type="checkbox"
+            checked={bundleAddOn.checked}
+            onChange={(e) => bundleAddOn.onChange(e.target.checked)}
+            className="mt-0.5 w-4 h-4 text-emerald-600 rounded border-gray-300 focus:ring-emerald-500 cursor-pointer flex-shrink-0"
+          />
+          <div className="flex-1 text-xs sm:text-sm space-y-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-extrabold text-gray-900">
+                {bundleAddOn.title}
+              </span>
+              {bundleAddOn.badgeText && (
+                <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-600 text-white">
+                  {bundleAddOn.badgeText}
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-gray-600 leading-relaxed break-keep">
+              {bundleAddOn.description}
+            </p>
+          </div>
+        </label>
       )}
 
       {/* 결과 재열람 링크 및 영수증 안내 이메일 입력란 */}

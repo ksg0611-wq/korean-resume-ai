@@ -50,12 +50,26 @@ export default function PaymentSuccessView({
       localStorage.getItem("lastCustomerEmail") ||
       undefined;
 
+    let checkoutMeta: Record<string, unknown> = {};
+    const rawMeta = localStorage.getItem(`paymentCheckoutMeta:${orderId}`);
+    if (rawMeta) {
+      try {
+        const parsed = JSON.parse(rawMeta);
+        if (parsed && typeof parsed === "object") {
+          checkoutMeta = parsed as Record<string, unknown>;
+        }
+      } catch {
+        // ignore invalid localStorage metadata
+      }
+    }
+
     const confirmPayment = async () => {
       try {
         const response = await fetch(confirmApiPath, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
+            ...checkoutMeta,
             paymentKey,
             orderId,
             amount,
@@ -64,6 +78,7 @@ export default function PaymentSuccessView({
         });
 
         if (response.ok) {
+          localStorage.removeItem(`paymentCheckoutMeta:${orderId}`);
           const data = await response.json().catch(() => null);
           const url = data?.payment?.receipt?.url;
           if (typeof url === "string" && url.startsWith("https://")) {

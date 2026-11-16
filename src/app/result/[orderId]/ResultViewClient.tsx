@@ -15,6 +15,9 @@ import type {
 interface ResultViewClientProps {
   orderId: string;
   serviceType: "resume" | "interview";
+  planType?: string | null;
+  linkedInterviewOrderId?: string | null;
+  upgradedToInterviewOrderId?: string | null;
   title: string;
   text: string;
   items?: ResumeQuestionItem[] | null;
@@ -36,6 +39,9 @@ interface ResultViewClientProps {
 export default function ResultViewClient({
   orderId,
   serviceType,
+  planType,
+  linkedInterviewOrderId,
+  upgradedToInterviewOrderId,
   title,
   text: initialText,
   items,
@@ -308,16 +314,41 @@ export default function ResultViewClient({
         )}
 
         <div className="flex flex-wrap gap-3">
-          {serviceType === "resume" && (
+          {serviceType === "resume" && linkedInterviewOrderId && (
+            <Link
+              href={`/interview?orderId=${encodeURIComponent(linkedInterviewOrderId)}&bundleFrom=${encodeURIComponent(orderId)}&token=${encodeURIComponent(resultToken)}`}
+              className="flex-1 min-w-[220px] py-3.5 px-5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl transition-colors text-center"
+            >
+              포함된 AI 면접 시뮬레이터(15문항·45회) 시작하기 →
+            </Link>
+          )}
+          {serviceType === "resume" && !linkedInterviewOrderId && upgradedToInterviewOrderId && (
+            <Link
+              href={`/interview?orderId=${encodeURIComponent(upgradedToInterviewOrderId)}`}
+              className="flex-1 min-w-[220px] py-3.5 px-5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl transition-colors text-center"
+            >
+              업그레이드한 AI 면접 시뮬레이터 바로가기 →
+            </Link>
+          )}
+          {serviceType === "resume" &&
+            !linkedInterviewOrderId &&
+            !upgradedToInterviewOrderId &&
+            planType !== "bundle" && (
+              <Link
+                href={`/interview?upgradeFrom=${encodeURIComponent(orderId)}&token=${encodeURIComponent(resultToken)}`}
+                className="flex-1 min-w-[220px] py-3.5 px-5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl transition-colors text-center"
+              >
+                내 자소서로 실전 모의면접 업그레이드 (+3,000원) →
+              </Link>
+            )}
+          {serviceType === "resume" && !linkedInterviewOrderId && !upgradedToInterviewOrderId && (
             <button
               type="button"
               onClick={handleInterviewRedirect}
               disabled={isRedirecting}
-              className="flex-1 min-w-[220px] py-3.5 px-5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white font-bold text-sm rounded-xl transition-colors cursor-pointer"
+              className="py-3.5 px-5 bg-gray-100 hover:bg-gray-200 disabled:bg-gray-200 text-gray-800 font-bold text-sm rounded-xl transition-colors cursor-pointer"
             >
-              {isRedirecting
-                ? "이동 중..."
-                : "AI 모의면접 압박 꼬리질문 더 연습하기 →"}
+              {isRedirecting ? "이동 중..." : "무료 모의면접 1회 체험하기"}
             </button>
           )}
           {serviceType === "interview" && interviewSessionId ? (

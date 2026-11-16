@@ -101,6 +101,14 @@ function InterviewContent({
     null
   );
   const [isWidgetReady, setIsWidgetReady] = useState(false);
+  const [upgradeContext, setUpgradeContext] = useState<{
+    eligible: boolean;
+    baseOrderId: string;
+    baseResultToken: string | null;
+    resumeExpired: boolean;
+  } | null>(null);
+  const [contextNotice, setContextNotice] = useState("");
+  const [contextError, setContextError] = useState("");
 
   const [paymentState, setPaymentState] = useState<
     "idle" | "processing" | "timeout" | "error"
@@ -112,9 +120,21 @@ function InterviewContent({
   const timeoutTimerRef = useRef<NodeJS.Timeout | null>(null);
   const isWidgetReadyRef = useRef(false);
 
+  const currentPrice = upgradeContext?.eligible
+    ? PRICING_PLANS.interview_upgrade.price
+    : PRICE;
+  const currentPriceDisplay = currentPrice.toLocaleString("ko-KR");
+
   useEffect(() => {
     isWidgetReadyRef.current = isWidgetReady;
-  }, [isWidgetReady]);
+    if (isWidgetReady && paymentMethodsWidgetRef.current?.updateAmount) {
+      try {
+        paymentMethodsWidgetRef.current.updateAmount(currentPrice);
+      } catch (err) {
+        console.warn("면접 결제 위젯 금액 갱신 실패:", err);
+      }
+    }
+  }, [isWidgetReady, currentPrice]);
 
   const initPaymentWidget = async () => {
     try {
@@ -224,6 +244,8 @@ function InterviewContent({
     const token = urlParams.get("token");
     const successOrderId = urlParams.get("orderId");
     const resumeSessionId = urlParams.get("sessionId");
+    const upgradeFrom = urlParams.get("upgradeFrom");
+    const bundleFrom = urlParams.get("bundleFrom");
 
     const fetchDraft = async (t: string) => {
       try {
@@ -250,6 +272,99 @@ function InterviewContent({
     };
 
     const bootstrap = async () => {
+      // 0a) 자소서 구매자 +3,000원 업그레이드 진입 (/interview?upgradeFrom=...&token=...)
+      if (upgradeFrom) {
+        try {
+          const qs = new URLSearchParams({ upgradeFrom });
+          if (token) qs.set("token", token);
+          const ctxRes = await fetch(`/api/interview/context?${qs.toString()}`, {
+            cache: "no-store",
+          });
+          const ctxData = await ctxRes.json().catch(() => null);
+          if (ctxRes.ok && ctxData?.eligible) {
+            setUpgradeContext({
+              eligible: true,
+              baseOrderId: ctxData.baseOrderId,
+              baseResultToken: token || null,
+              resumeExpired: Boolean(ctxData.resumeExpired),
+            });
+            if (ctxData.jobCategory) {
+              setJobCategory(ctxData.jobCategory);
+              localStorage.setItem("interviewJobCategory", ctxData.jobCategory);
+            }
+            if (ctxData.resumeText) {
+              setResumeText(ctxData.resumeText);
+              localStorage.setItem("interviewResumeDraft", ctxData.resumeText);
+            }
+            setContextNotice(
+              ctxData.resumeExpired
+                ? "자소서 결과 보관 기간(7일)이 지나 자소서 원문을 다시 입력해 주세요. +3,000원 업그레이드 할인 자격은 유지됩니다."
+                : `기존 자소서 구매자 전용 +3,000원 업그레이드 할인이 적용되었습니다 (주문 ${ctxData.baseOrderId}). 자소서 원문을 자동으로 불러왔습니다.`
+            );
+          } else {
+            setContextError(
+              ctxData?.message ||
+                "업그레이드 할인 자격을 확인할 수 없어 기본 요금(4,900원)이 적용됩니다."
+            );
+          }
+        } catch {
+          setContextError(
+            "업그레이드 정보를 불러오지 못해 기본 요금(4,900원)이 적용됩니다."
+          );
+        }
+        urlParams.delete("upgradeFrom");
+        urlParams.delete("token");
+        window.history.replaceState({}, document.title, window.location.pathname);
+        return;
+      }
+
+      // 0b) 7,900원 통합 패키지 진입 (/interview?orderId=int_...&bundleFrom=...&token=...)
+      if (bundleFrom) {
+        try {
+          const qs = new URLSearchParams({ bundleFrom });
+          if (token) qs.set("token", token);
+          const ctxRes = await fetch(`/api/interview/context?${qs.toString()}`, {
+            cache: "no-store",
+          });
+          const ctxData = await ctxRes.json().catch(() => null);
+          if (ctxRes.ok && ctxData?.eligible && ctxData.linkedInterviewOrderId) {
+            const linkedOrderId = ctxData.linkedInterviewOrderId as string;
+            const resolvedCategory =
+              ctxData.jobCategory || savedJob || DEFAULT_INTERVIEW_JOB_CATEGORY;
+            setActiveOrder({
+              orderId: linkedOrderId,
+              remainingGenerations: ctxData.remainingGenerations ?? PAID_INTERVIEW_GENERATIONS,
+            });
+            setJobCategory(resolvedCategory);
+            localStorage.setItem("interviewJobCategory", resolvedCategory);
+            if (ctxData.resumeText) {
+              setResumeText(ctxData.resumeText);
+              localStorage.setItem("interviewResumeDraft", ctxData.resumeText);
+            }
+            urlParams.delete("bundleFrom");
+            urlParams.delete("orderId");
+            urlParams.delete("token");
+            window.history.replaceState({}, document.title, window.location.pathname);
+
+            if ((ctxData.remainingGenerations ?? 0) > 0 && ctxData.resumeText) {
+              setContextNotice(
+                "7,900원 통합 패키지에 포함된 AI 면접 시뮬레이터(15문항·45회)를 즉시 시작합니다."
+              );
+              await handleGenerate(linkedOrderId, ctxData.resumeText, resolvedCategory);
+            } else {
+              setContextNotice(
+                ctxData.resumeExpired
+                  ? "결과 보관 기간(7일)이 지나 자소서 원문을 다시 입력한 뒤 위 보유 이용권 버튼으로 면접을 시작해 주세요."
+                  : "통합 패키지 연동 이용권이 연결되었습니다. 아래 버튼으로 모의면접을 시작하세요."
+              );
+            }
+            return;
+          }
+        } catch {
+          // fall through to standard bootstrap
+        }
+      }
+
       // 1) /result/[orderId]?token=... 에서 "이어서 모의면접 연습하기"로 복귀한 경우
       if (successOrderId && token) {
         const ok = await restoreSessionFromServer({
@@ -358,13 +473,55 @@ function InterviewContent({
 
     try {
       const orderId = "int_" + Math.random().toString(36).substring(2, 11);
+      const isUpgrade = Boolean(upgradeContext?.eligible && upgradeContext.baseOrderId);
+      const selectedPlanType = isUpgrade ? "interview_upgrade" : "interview_single";
+
       localStorage.setItem("lastCustomerEmail", cleanEmail);
       localStorage.setItem(`orderEmail:${orderId}`, cleanEmail);
       localStorage.setItem("interviewJobCategory", jobCategory);
+      localStorage.setItem(
+        `paymentCheckoutMeta:${orderId}`,
+        JSON.stringify({
+          planType: selectedPlanType,
+          ...(isUpgrade
+            ? {
+                baseOrderId: upgradeContext!.baseOrderId,
+                baseResultToken: upgradeContext!.baseResultToken,
+              }
+            : {}),
+        })
+      );
+
+      // 결제창 호출 직전 서버 의도 등록 (+3,000원 업그레이드인 경우 자격·1회 제한 사전 검증)
+      const prepareRes = await fetch("/api/payments/prepare", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          orderId,
+          planType: selectedPlanType,
+          email: cleanEmail,
+          ...(isUpgrade
+            ? {
+                baseOrderId: upgradeContext!.baseOrderId,
+                baseResultToken: upgradeContext!.baseResultToken,
+              }
+            : {}),
+        }),
+      });
+      if (!prepareRes.ok) {
+        const prepErr = await prepareRes.json().catch(() => null);
+        setPaymentState("idle");
+        setError(
+          prepErr?.error || "결제 준비 검증에 실패했습니다. 주문 상태를 확인해 주세요."
+        );
+        return;
+      }
 
       await paymentWidget.requestPayment({
         orderId,
-        orderName: PRICING_PLANS.interview_single.label,
+        orderName: isUpgrade
+          ? PRICING_PLANS.interview_upgrade.label
+          : PRICING_PLANS.interview_single.label,
         customerEmail: cleanEmail,
         successUrl: window.location.origin + "/interview/payments/success",
         failUrl: window.location.origin + "/payments/fail",
@@ -562,6 +719,8 @@ function InterviewContent({
 
       if (data.order) {
         setActiveOrder(null);
+        setUpgradeContext(null);
+        setContextNotice("");
         if (data.order.resultUrl && data.resultToken) {
           setPaidResultInfo({
             orderId: data.order.orderId,
@@ -616,7 +775,7 @@ function InterviewContent({
     <div className="rounded-xl border border-gray-200 overflow-hidden bg-gray-50/70">
       <div className="px-4 py-2.5 bg-white border-b border-gray-200 flex items-center justify-between">
         <h3 className="text-xs sm:text-sm font-extrabold text-gray-900">
-          무료 체험(일 1회) vs 유료 시뮬레이터({PRICE_DISPLAY}원) 비교
+          무료 체험(일 1회) vs 유료 시뮬레이터({currentPriceDisplay}원) 비교
         </h3>
       </div>
       <div className="overflow-x-auto">
@@ -626,7 +785,7 @@ function InterviewContent({
               <th className="py-2 px-3 font-bold w-[26%]">항목</th>
               <th className="py-2 px-3 font-bold w-[34%]">무료 체험 (0원)</th>
               <th className="py-2 px-3 font-extrabold text-blue-700 bg-blue-50/70 w-[40%]">
-                실전 시뮬레이터 ({PRICE_DISPLAY}원)
+                실전 시뮬레이터 ({currentPriceDisplay}원)
               </th>
             </tr>
           </thead>
@@ -692,6 +851,16 @@ function InterviewContent({
             </div>
 
             <div className="bg-white p-5 sm:p-6 rounded-2xl shadow-sm border border-gray-200 flex flex-col gap-3">
+              {contextNotice && (
+                <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-900 font-semibold leading-relaxed">
+                  {contextNotice}
+                </div>
+              )}
+              {contextError && (
+                <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900 font-semibold leading-relaxed">
+                  {contextError}
+                </div>
+              )}
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <label
                   htmlFor="interview-textarea"
@@ -760,10 +929,18 @@ function InterviewContent({
 
             <div id="interview-payment-anchor" className="scroll-mt-20">
               <PaymentSection
-                priceDisplay={PRICE_DISPLAY}
-                title={`면접 시뮬레이터 결제 및 시작 (${PRICE_DISPLAY}원)`}
+                priceDisplay={currentPriceDisplay}
+                title={
+                  upgradeContext?.eligible
+                    ? `자소서 구매자 면접 업그레이드 (${currentPriceDisplay}원)`
+                    : `면접 시뮬레이터 결제 및 시작 (${currentPriceDisplay}원)`
+                }
                 subTitle={`직무 10 + 공공기관 인성 5 = 총 15문항 · 최대 ${INTERVIEW_MAX_EVALUATIONS}회 답변 채점·꼬리질문 · 대비 노트 7일 보관`}
-                badgeText="1회 이용권"
+                badgeText={
+                  upgradeContext?.eligible
+                    ? "1,900원 할인 · 업그레이드"
+                    : "1회 이용권"
+                }
                 customerEmail={customerEmail}
                 onCustomerEmailChange={(v) => {
                   setCustomerEmail(v);
@@ -785,7 +962,11 @@ function InterviewContent({
                 paymentTimeoutMsg={paymentTimeoutMsg}
                 onRetryPayment={handleRetryPayment}
                 onPaymentClick={handlePaymentClick}
-                paidButtonText={`${PRICE_DISPLAY}원 결제하고 15문항 시뮬레이터 시작`}
+                paidButtonText={
+                  upgradeContext?.eligible
+                    ? `+${currentPriceDisplay}원 업그레이드하고 15문항 시작`
+                    : `${currentPriceDisplay}원 결제하고 15문항 시뮬레이터 시작`
+                }
                 paidButtonSubText={PAID_INTERVIEW_BREAKDOWN}
                 processingText="결제창을 준비하고 있습니다..."
                 isGenerating={isGenerating}

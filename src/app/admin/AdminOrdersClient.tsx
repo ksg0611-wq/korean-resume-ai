@@ -310,9 +310,39 @@ export default function AdminOrdersClient() {
                     >
                       <td className="py-3 px-3 align-top">
                         <div className="font-mono font-bold text-gray-900">{order.orderId}</div>
-                        <span className="text-[11px] text-gray-500">
-                          {order.serviceType === "interview" ? "면접 꼬리질문" : "자기소개서"}
-                        </span>
+                        <div className="flex flex-wrap items-center gap-1 mt-0.5">
+                          <span className="text-[11px] text-gray-500">
+                            {order.serviceType === "interview" ? "면접 시뮬레이터" : "자기소개서"}
+                          </span>
+                          {order.planType && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-gray-100 text-gray-700 border border-gray-200">
+                              {order.planType === "bundle"
+                                ? "통합 7,900"
+                                : order.planType === "bundle_companion"
+                                  ? "통합 연동"
+                                  : order.planType === "interview_upgrade"
+                                    ? "업그레이드 +3,000"
+                                    : order.planType === "interview_single"
+                                      ? "면접 단독"
+                                      : "자소서 단독"}
+                            </span>
+                          )}
+                        </div>
+                        {order.linkedInterviewOrderId && (
+                          <div className="text-[10px] text-emerald-700 font-mono mt-0.5">
+                            연동 면접: {order.linkedInterviewOrderId}
+                          </div>
+                        )}
+                        {order.upgradedToInterviewOrderId && (
+                          <div className="text-[10px] text-blue-700 font-mono mt-0.5">
+                            업그레이드: {order.upgradedToInterviewOrderId}
+                          </div>
+                        )}
+                        {order.baseOrderId && (
+                          <div className="text-[10px] text-gray-500 font-mono mt-0.5">
+                            기준 자소서: {order.baseOrderId}
+                          </div>
+                        )}
                       </td>
                       <td className="py-3 px-3 align-top">
                         <span className={`inline-block px-2 py-0.5 rounded-md border font-bold text-[11px] ${badge.cls}`}>

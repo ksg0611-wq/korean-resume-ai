@@ -77,6 +77,10 @@ export default function PackageComparisonTable() {
           </tbody>
         </table>
       </div>
+
+      <div className="px-4 py-2.5 bg-emerald-50/80 border-t border-emerald-100 text-[11px] text-emerald-900 font-medium break-keep">
+        💡 결제 영역에서 <strong>&quot;면접 연습 추가 (+3,000원)&quot;</strong> 체크 시 <strong>7,900원 통합 패키지</strong>로 AI 모의면접 시뮬레이터(15문항·45회 채점·꼬리질문·7일 대비 노트)까지 함께 이용하실 수 있습니다.
+      </div>
     </div>
   );
 }
