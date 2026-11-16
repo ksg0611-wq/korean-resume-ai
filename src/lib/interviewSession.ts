@@ -34,12 +34,27 @@ export interface QuestionThreadRecord {
   followUps: ThreadFollowUpRecord[];
 }
 
+export interface InterviewJobContext {
+  sn?: number;
+  instName: string;
+  title: string;
+  ncsNames: string[];
+  qualification?: string | null;
+  preference?: string | null;
+  procedureInfo?: string | null;
+}
+
 export interface InterviewSessionRecord {
   sessionId: string;
   orderId: string | null;
   isFree: boolean;
   jobCategory: string;
+  jobContext?: InterviewJobContext | null;
   resumeText: string;
+  selfIntroScript?: string | null;
+  selfIntroHook?: string | null;
+  selfIntroTips?: string[];
+  selfIntroGenCount?: number;
   questions: SimulatorQuestion[];
   threads: Record<string, QuestionThreadRecord>;
   maxEvaluations: number;
@@ -218,6 +233,7 @@ export async function createInterviewSession(options: {
   isFree: boolean;
   orderId?: string | null;
   jobCategory: string;
+  jobContext?: InterviewJobContext | null;
   resumeText: string;
   questions: SimulatorQuestion[];
 }): Promise<InterviewSessionRecord> {
@@ -237,6 +253,7 @@ export async function createInterviewSession(options: {
     orderId: options.orderId ?? null,
     isFree: options.isFree,
     jobCategory: options.jobCategory,
+    ...(options.jobContext ? { jobContext: options.jobContext } : {}),
     resumeText: options.resumeText,
     questions: options.questions,
     threads: {},
@@ -501,15 +518,46 @@ export async function refundInterviewEvaluation(options: {
   return parsed?.ok && parsed?.quota ? (parsed.quota as EvalQuotaState) : null;
 }
 
+export async function saveSessionSelfIntro(options: {
+  sessionId: string;
+  script: string;
+  hookSummary: string;
+  speakingTips: string[];
+}): Promise<InterviewSessionRecord | null> {
+  const redis = requireRedisClient();
+  const sessionKey = getInterviewSessionKey(options.sessionId.trim());
+  const existing = await getInterviewSession(options.sessionId);
+  if (!existing) return null;
+
+  const currentTtl = await redis.ttl(sessionKey);
+  const fallbackTtl = existing.isFree
+    ? INTERVIEW_FREE_SESSION_TTL_SECONDS
+    : INTERVIEW_PAID_SESSION_TTL_SECONDS;
+
+  const updated: InterviewSessionRecord = {
+    ...existing,
+    selfIntroScript: options.script,
+    selfIntroHook: options.hookSummary,
+    selfIntroTips: options.speakingTips,
+    selfIntroGenCount: (existing.selfIntroGenCount ?? 0) + 1,
+    updatedAt: new Date().toISOString(),
+  };
+
+  await redis.set(sessionKey, updated, {
+    ex: currentTtl > 0 ? currentTtl : fallbackTtl,
+  });
+  return updated;
+}
+
 /**
- * 현재 세션 상태를 면접 대비 노트 구조(15문항 + 내 답변 + 교정 답변 + 꼬리질문 1~3단계 + 일관성 점검)로 컴파일
+ * 현재 세션 상태를 면접 대비 노트 구조(15문항 + 1분 자기소개 + 내 답변 + 교정 답변 + 꼬리질문 1~3단계 + 일관성 점검)로 컴파일
  */
 export function compileInterviewPrepNote(
   session: InterviewSessionRecord
 ): InterviewPrepNote {
   let answeredCount = 0;
 
-  const entries: InterviewPrepNoteEntry[] = session.questions.map((q) => {
+  const buildEntry = (q: SimulatorQuestion): InterviewPrepNoteEntry => {
     const thread = session.threads[q.id];
     const initEval = thread?.initialEvaluation ?? null;
 
@@ -555,7 +603,27 @@ export function compileInterviewPrepNote(
       modelAnswer: initEval?.modelAnswer ?? null,
       followUps,
     };
-  });
+  };
+
+  const entries: InterviewPrepNoteEntry[] = session.questions.map(buildEntry);
+
+  const selfIntroThread = session.threads["self_intro"];
+  let selfIntroEntry: InterviewPrepNoteEntry | null = null;
+  if (selfIntroThread || session.selfIntroScript) {
+    selfIntroEntry = buildEntry({
+      id: "self_intro",
+      number: 0,
+      kind: "self_intro",
+      ncsCompetency: "의사소통능력",
+      intentSummary:
+        session.selfIntroHook ||
+        "1분 자기소개 대본의 두괄식 구조·직무 연결성·발화 분량 적정성 점검",
+      question: "1분 자기소개 대본 (권장 250~330자 · 약 50~60초)",
+    });
+    if (!selfIntroEntry.userAnswer && session.selfIntroScript) {
+      selfIntroEntry.modelAnswer = session.selfIntroScript;
+    }
+  }
 
   return {
     sessionId: session.sessionId,
@@ -566,6 +634,7 @@ export function compileInterviewPrepNote(
     usedEvaluations: session.usedEvaluations,
     remainingEvaluations: session.remainingEvaluations,
     updatedAt: session.updatedAt,
+    ...(selfIntroEntry ? { selfIntroEntry } : {}),
     entries,
   };
 }
@@ -639,6 +708,9 @@ export function formatInterviewNoteText(note: InterviewPrepNote): string {
     }
   };
 
+  if (note.selfIntroEntry) {
+    renderSection("PART 0. 1분 자기소개 대본 및 평가", [note.selfIntroEntry]);
+  }
   renderSection("PART 1. 직무·경험 심층 면접 10문항", jobEntries);
   renderSection("PART 2. 공공기관 인성·조직적합성 5문항", persEntries);
 

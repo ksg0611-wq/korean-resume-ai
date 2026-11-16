@@ -107,7 +107,7 @@ export interface InterviewPrepFollowUpNote {
 export interface InterviewPrepNoteEntry {
   questionId: string;
   number: number;
-  kind: "job" | "personality";
+  kind: "job" | "personality" | "self_intro";
   ncsCompetency: string;
   intentSummary: string;
   question: string;
@@ -131,6 +131,7 @@ export interface InterviewPrepNote {
   usedEvaluations: number;
   remainingEvaluations: number;
   updatedAt: string;
+  selfIntroEntry?: InterviewPrepNoteEntry | null;
   entries: InterviewPrepNoteEntry[];
 }
 

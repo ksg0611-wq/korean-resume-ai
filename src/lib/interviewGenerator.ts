@@ -1,6 +1,10 @@
 import { GoogleGenerativeAI, SchemaType, type Schema } from "@google/generative-ai";
 import { GEMINI_CONFIG, generateContentWithFallback } from "@/lib/gemini";
-import { sanitizeInterviewQuestionText } from "@/lib/textMetrics";
+import {
+  sanitizeInterviewQuestionText,
+  sanitizeUnverifiedNumbers,
+} from "@/lib/textMetrics";
+import type { InterviewJobContext } from "@/lib/interviewSession";
 import {
   INTERVIEW_FREE_QUESTION_COUNT,
   INTERVIEW_JOB_QUESTION_COUNT,
@@ -158,6 +162,63 @@ const EVALUATION_SCHEMA: Schema = {
   ],
 };
 
+export const SELF_INTRO_QUESTION_ID = "self_intro";
+
+export const SELF_INTRO_QUESTION: SimulatorQuestion = {
+  id: SELF_INTRO_QUESTION_ID,
+  number: 0,
+  kind: "self_intro",
+  ncsCompetency: "의사소통능력",
+  intentSummary:
+    "지원 동기·핵심 직무 강점·공공기관 직무 기여 포부를 1분(250~330자) 내 두괄식으로 압축 전달하는지 검증",
+  question:
+    "1분 자기소개를 해주세요. (지원 직무와 연결되는 본인의 핵심 경험과 입사 후 기여 방안을 중심으로 말씀해 주세요)",
+};
+
+const SELF_INTRO_RESPONSE_SCHEMA: Schema = {
+  type: SchemaType.OBJECT,
+  properties: {
+    script: {
+      type: SchemaType.STRING,
+      description: "공백 포함 270~320자 분량의 1분 자기소개 구술 대본",
+    },
+    hookSummary: {
+      type: SchemaType.STRING,
+      description: "첫 문장 두괄식 핵심 키워드 요약 1문장 (40자 이내)",
+    },
+    speakingTips: {
+      type: SchemaType.ARRAY,
+      items: { type: SchemaType.STRING },
+      description: "발표 호흡·강조 포인트 팁 3줄",
+    },
+  },
+  required: ["script", "hookSummary", "speakingTips"],
+};
+
+function formatJobContextPromptBlock(
+  jobContext?: InterviewJobContext | null
+): string {
+  if (!jobContext) return "";
+  const lines = [
+    `\n[지원 채용공고 컨텍스트 (면접 질문·평가에 반드시 반영)]`,
+    `- 기관명: ${jobContext.instName}`,
+    `- 채용 공고명: ${jobContext.title}`,
+  ];
+  if (jobContext.ncsNames?.length > 0) {
+    lines.push(`- NCS 채용 분야: ${jobContext.ncsNames.join(", ")}`);
+  }
+  if (jobContext.qualification) {
+    lines.push(`- 지원 자격·직무 요건: ${jobContext.qualification.slice(0, 350)}`);
+  }
+  if (jobContext.preference) {
+    lines.push(`- 우대 사항·인재상: ${jobContext.preference.slice(0, 250)}`);
+  }
+  if (jobContext.procedureInfo) {
+    lines.push(`- 전형 절차·면접 방식: ${jobContext.procedureInfo.slice(0, 250)}`);
+  }
+  return lines.join("\n");
+}
+
 /**
  * 자소서 기반 공공기관 면접 예상 질문 세트 생성
  * - 무료: 3문항 (직무 2 + 공공기관 인성 1)
@@ -168,6 +229,7 @@ export async function generateInterviewQuestionSet(options: {
   jobCategory: string;
   resumeText: string;
   isFree: boolean;
+  jobContext?: InterviewJobContext | null;
 }): Promise<{
   questions: SimulatorQuestion[];
   usedModel: string;
@@ -181,8 +243,9 @@ export async function generateInterviewQuestionSet(options: {
     totalTokens: number;
   };
 }> {
-  const { genAI, jobCategory, resumeText, isFree } = options;
+  const { genAI, jobCategory, resumeText, isFree, jobContext } = options;
   const roleDescription = resolveInterviewRoleDescription(jobCategory);
+  const jobContextBlock = formatJobContextPromptBlock(jobContext);
 
   const countInstruction = isFree
     ? `총 ${INTERVIEW_FREE_QUESTION_COUNT}개의 면접 질문을 생성하세요:
@@ -210,7 +273,7 @@ ${NCS_COMPETENCIES.join(", ")}
 5. question은 실제 면접관 어조의 직접 질문 1~2문장으로 작성하세요.
 
 [지원 직무 분야]
-${jobCategory.trim()}
+${jobCategory.trim()}${jobContextBlock}
 
 [지원자 자기소개서]
 ${resumeText.trim()}`;
@@ -306,6 +369,7 @@ export async function evaluateInterviewAnswerWithAI(options: {
   userAnswer: string;
   priorHistory?: Array<{ depth: number; question: string; userAnswer: string }>;
   generateNextFollowUp: boolean;
+  jobContext?: InterviewJobContext | null;
 }): Promise<{
   evaluation: AIInterviewAnchorEvaluation;
   usedModel: string;
@@ -322,9 +386,11 @@ export async function evaluateInterviewAnswerWithAI(options: {
     userAnswer,
     priorHistory = [],
     generateNextFollowUp,
+    jobContext,
   } = options;
 
   const roleDescription = resolveInterviewRoleDescription(jobCategory);
+  const jobContextBlock = formatJobContextPromptBlock(jobContext);
   const nextDepth = depth + 1;
 
   const stageInstruction =
@@ -389,8 +455,14 @@ export async function evaluateInterviewAnswerWithAI(options: {
 ${stageInstruction}
 
 [평가 대상 정보]
-- 지원 직무 분야: ${jobCategory}
-- 질문 유형: ${question.kind === "personality" ? "공공기관 인성·조직적합성(personality)" : "직무·경험 심층(job)"}
+- 지원 직무 분야: ${jobCategory}${jobContextBlock}
+- 질문 유형: ${
+    question.kind === "personality"
+      ? "공공기관 인성·조직적합성(personality)"
+      : question.kind === "self_intro"
+        ? "1분 자기소개 대본 구술(self_intro · 권장 250~330자 · 두괄식 핵심강점·지원동기·직무기여 압축 평가)"
+        : "직무·경험 심층(job)"
+  }
 - 매핑된 NCS 영역: ${question.ncsCompetency}
 - 현재 질문 (단계 ${depth}/3): ${currentPromptQuestion}
 
@@ -458,6 +530,103 @@ ${userAnswer.trim()}`;
     evaluation,
     usedModel: genResult.usedModel,
     attempts: genResult.attempts,
+    durationMs: genResult.durationMs,
+  };
+}
+
+/**
+ * 1분 자기소개 대본 생성 (권장 270~320자, 약 55초 분량)
+ * - 자소서 원문에 없는 수치·성과 날조 금지 (sanitizeUnverifiedNumbers 적용)
+ * - 유료 세션은 WRITING_MODEL(gemini-4-hydrogen), 무료 세션은 FREE_MODEL(gemini-3.8-flash) 사용
+ */
+export async function generateSelfIntroScript(options: {
+  genAI: GoogleGenerativeAI;
+  jobCategory: string;
+  resumeText: string;
+  isFree: boolean;
+  jobContext?: InterviewJobContext | null;
+}): Promise<{
+  script: string;
+  hookSummary: string;
+  speakingTips: string[];
+  usedModel: string;
+  durationMs: number;
+}> {
+  const { genAI, jobCategory, resumeText, isFree, jobContext } = options;
+  const roleDescription = resolveInterviewRoleDescription(jobCategory);
+  const jobContextBlock = formatJobContextPromptBlock(jobContext);
+
+  const prompt = `당신은 ${roleDescription}입니다.
+아래 지원자의 자기소개서(및 공고 컨텍스트)를 바탕으로 실제 공공기관 면접장에서 1분(약 50~60초) 안에 임팩트 있게 말할 수 있는 [1분 자기소개 구술 대본]을 작성하세요.
+
+[대본 작성 엄수 규칙]
+1. 분량: **공백 포함 반드시 270~320자** 사이로 작성하세요 (초당 5음절 기준 약 55초 구술 분량).
+2. 3단 구성:
+   - ① 첫 문장(도입 훅): 지원 분야·직무 핵심 정체성을 한 문장으로 두괄식 선언 (인사말은 "안녕하십니까" 정도로 간결하게)
+   - ② 핵심 경험 근거(중간): 자소서에 실제 나온 1~2개 경험·행동·결과를 구술형 어조("~했습니다")로 자연스럽게 연결
+   - ③ 입사 후 직무 포부(마무리): 공익 가치 또는 기관·직무 기여 방향 한 문장
+3. **수치 날조 절대 금지**: 자소서 원문에 없는 %, 원, 만, 억, 건, 명, 배, 시간, Zero 등 정량 수치를 절대 지어내지 말고, 수치가 필요한 자리는 반드시 "[본인 수치 입력]"으로만 표기하세요.
+4. 블라인드 면접 위반(출신 학교명·나이·가족·출신지) 표현은 절대 넣지 마세요.
+
+[지원 직무 분야]
+${jobCategory.trim()}${jobContextBlock}
+
+[지원자 자기소개서]
+${resumeText.trim()}`;
+
+  const targetModel = isFree ? GEMINI_CONFIG.FREE_MODEL : GEMINI_CONFIG.WRITING_MODEL;
+  const genResult = await generateContentWithFallback(
+    genAI,
+    prompt,
+    targetModel,
+    "low",
+    {
+      temperature: 0.2,
+      responseMimeType: "application/json",
+      responseSchema: SELF_INTRO_RESPONSE_SCHEMA,
+      perAttemptTimeoutMs: 22_000,
+      fallbackAttemptTimeoutMs: 14_000,
+      totalBudgetMs: 38_000,
+    }
+  );
+
+  const parsed = JSON.parse(stripMarkdownFences(genResult.text)) as {
+    script?: string;
+    hookSummary?: string;
+    speakingTips?: string[];
+  };
+
+  const sanitizedScript = sanitizeUnverifiedNumbers(
+    (typeof parsed.script === "string" ? parsed.script.trim() : "") ||
+      "안녕하십니까. 데이터와 규정 기반 문제해결 역량을 갖춘 인재로서 지원했습니다. 이전 경험에서 반복 비효율을 직접 진단하고 표준 절차를 구축해 개선한 바 있습니다. 입사 후에도 공공 서비스의 정확성과 신뢰를 높이는 실무자가 되겠습니다.",
+    resumeText
+  );
+
+  const hookSummary = sanitizeUnverifiedNumbers(
+    (typeof parsed.hookSummary === "string" && parsed.hookSummary.trim()) ||
+      "지원 직무 핵심 역량 중심 1분 두괄식 소개",
+    resumeText
+  );
+
+  const speakingTips = Array.isArray(parsed.speakingTips)
+    ? parsed.speakingTips
+        .map((t) => String(t || "").trim())
+        .filter(Boolean)
+        .slice(0, 3)
+    : [];
+
+  return {
+    script: sanitizedScript,
+    hookSummary,
+    speakingTips:
+      speakingTips.length > 0
+        ? speakingTips
+        : [
+            "첫 문장 직후 1초 숨 고르기를 두어 면접관 시선을 집중시키세요.",
+            "핵심 행동 동사와 검증된 성과 구간에서 속도를 약간 늦춰 강조하세요.",
+            "마지막 포부는 지원 기관명/직무 역할과 연결해 또렷하게 마무리하세요.",
+          ],
+    usedModel: genResult.usedModel,
     durationMs: genResult.durationMs,
   };
 }

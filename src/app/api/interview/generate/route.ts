@@ -24,7 +24,9 @@ import {
   compileInterviewPrepNote,
   createInterviewSession,
   formatInterviewNoteText,
+  type InterviewJobContext,
 } from "@/lib/interviewSession";
+import { getJobDetail } from "@/lib/db/jobs";
 import { BUSINESS_INFO } from "@/lib/siteConfig";
 import { reportServerError } from "@/lib/alerts";
 
@@ -48,6 +50,9 @@ export async function POST(req: Request) {
         ? body.orderId.trim()
         : null;
     const optionalEmail = normalizeEmail(body?.email);
+    const rawJobSn = Number(body?.jobSn);
+    const validJobSn =
+      Number.isFinite(rawJobSn) && rawJobSn > 0 ? Math.trunc(rawJobSn) : null;
 
     if (typeof isFree !== "boolean" || !resumeText) {
       return NextResponse.json(
@@ -94,6 +99,26 @@ export async function POST(req: Request) {
 
     const genAI = new GoogleGenerativeAI(apiKey);
 
+    let verifiedJobContext: InterviewJobContext | null = null;
+    if (validJobSn) {
+      try {
+        const job = await getJobDetail(validJobSn);
+        if (job) {
+          verifiedJobContext = {
+            sn: job.sn,
+            instName: job.inst_name,
+            title: job.title,
+            ncsNames: job.ncs_names || [],
+            qualification: job.qualification ?? null,
+            preference: job.preference ?? null,
+            procedureInfo: job.procedure_info ?? null,
+          };
+        }
+      } catch (jobErr) {
+        console.warn("[/api/interview/generate] Job context lookup failed:", jobErr);
+      }
+    }
+
     // ── 유료 이용권 경로 (15문항 생성 + 7일 세션 + 즉시 result:* 대비 노트 생성 및 이메일 발송) ──
     if (!isFree && parsedOrderId) {
       const begin = await beginPaidGeneration({
@@ -132,12 +157,14 @@ export async function POST(req: Request) {
           jobCategory: rawJobCategory,
           resumeText,
           isFree: false,
+          jobContext: verifiedJobContext,
         });
 
         const session = await createInterviewSession({
           isFree: false,
           orderId: parsedOrderId,
           jobCategory: rawJobCategory,
+          jobContext: verifiedJobContext,
           resumeText,
           questions: genOutcome.questions,
         });
@@ -291,12 +318,14 @@ export async function POST(req: Request) {
       jobCategory: rawJobCategory,
       resumeText,
       isFree: true,
+      jobContext: verifiedJobContext,
     });
 
     const freeSession = await createInterviewSession({
       isFree: true,
       orderId: null,
       jobCategory: rawJobCategory,
+      jobContext: verifiedJobContext,
       resumeText,
       questions: freeOutcome.questions,
     });

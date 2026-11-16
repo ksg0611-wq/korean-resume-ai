@@ -95,7 +95,7 @@ export function normalizeNcsCompetency(raw: unknown): NcsCompetency {
   return "문제해결능력";
 }
 
-export type InterviewQuestionKind = "job" | "personality";
+export type InterviewQuestionKind = "job" | "personality" | "self_intro";
 
 export interface SimulatorQuestion {
   id: string;
@@ -146,6 +146,7 @@ export interface AnswerEvaluationReport {
   scoreFormulaNote: string;
   grade: "S" | "A" | "B" | "C" | "D";
   charCount: number;
+  estimatedSpeechSeconds: number;
   metricCount: number;
   categories: InterviewCategoryScore[];
   feedback3Lines: [string, string, string];
@@ -218,18 +219,60 @@ export function snapToInterviewAnchor(rawValue: unknown, anchors: readonly numbe
 /**
  * 간결성 점수 산출 (15점 만점, 100% 순수 규칙 기반)
  * - 일반/꼬리질문(100~800자): 250~550자(15점), 150~249·551~700자(11점), 그 외(7점)
+ * - 1분 자기소개 대본(80~600자): 250~330자(15점, 약 48~63초), 200~249·331~400자(11점), 그 외(7점)
  */
-export function calculateConcisenessScore(answerText: string): {
+export function calculateConcisenessScore(
+  answerText: string,
+  questionKind: InterviewQuestionKind = "job"
+): {
   score: number;
   charCount: number;
+  estimatedSpeechSeconds: number;
   label: string;
   feedback: string;
 } {
   const charCount = answerText.trim().length;
+  const estimatedSpeechSeconds = Math.max(1, Math.round(charCount / 5.2));
+
+  if (questionKind === "self_intro") {
+    if (charCount >= 250 && charCount <= 330) {
+      return {
+        score: 15,
+        charCount,
+        estimatedSpeechSeconds,
+        label: "1분 적정",
+        feedback: `1분 자기소개에 알맞은 분량(${charCount}자 · 예상 발화 약 ${estimatedSpeechSeconds}초)으로 핵심을 압축했습니다.`,
+      };
+    }
+    if ((charCount >= 200 && charCount < 250) || (charCount > 330 && charCount <= 400)) {
+      return {
+        score: 11,
+        charCount,
+        estimatedSpeechSeconds,
+        label: "보통",
+        feedback:
+          charCount < 250
+            ? `분량(${charCount}자 · 약 ${estimatedSecondsStr(estimatedSpeechSeconds)})이 다소 짧아 핵심 경험 1문장 보강을 권장합니다 (250~330자 권장).`
+            : `분량(${charCount}자 · 약 ${estimatedSecondsStr(estimatedSpeechSeconds)})이 다소 길어 1분(330자 이내) 내로 압축하면 전달력이 높아집니다.`,
+      };
+    }
+    return {
+      score: 7,
+      charCount,
+      estimatedSpeechSeconds,
+      label: "개선 필요",
+      feedback:
+        charCount < 200
+          ? `1분 자기소개 기준(${charCount}자 · 약 ${estimatedSecondsStr(estimatedSpeechSeconds)})보다 크게 짧습니다.`
+          : `1분 발화 적정 분량(${charCount}자 · 약 ${estimatedSecondsStr(estimatedSpeechSeconds)})을 초과해 면접 집중도가 떨어질 수 있습니다.`,
+    };
+  }
+
   if (charCount >= 250 && charCount <= 550) {
     return {
       score: 15,
       charCount,
+      estimatedSpeechSeconds,
       label: "적정",
       feedback: `구술 40~90초 내외에 알맞은 분량(${charCount}자)으로 핵심을 간결하게 전달했습니다.`,
     };
@@ -238,6 +281,7 @@ export function calculateConcisenessScore(answerText: string): {
     return {
       score: 11,
       charCount,
+      estimatedSpeechSeconds,
       label: "양호",
       feedback:
         charCount < 250
@@ -248,12 +292,17 @@ export function calculateConcisenessScore(answerText: string): {
   return {
     score: 7,
     charCount,
+    estimatedSpeechSeconds,
     label: "개선 필요",
     feedback:
       charCount < 150
         ? `답변 분량(${charCount}자)이 매우 짧아 실무 검증에 필요한 구체성이 부족합니다.`
         : `답변 분량(${charCount}자)이 장황해 면접관이 핵심 요지를 놓칠 우려가 있습니다.`,
   };
+}
+
+function estimatedSecondsStr(sec: number): string {
+  return `${sec}초`;
 }
 
 /**
@@ -416,7 +465,7 @@ export function buildInterviewEvaluationReport(options: {
   } = options;
 
   const detMetrics = countResumeMetrics(userAnswer, 400);
-  const conciseness = calculateConcisenessScore(userAnswer);
+  const conciseness = calculateConcisenessScore(userAnswer, questionKind);
 
   // 1. STAR 구조 (25점)
   const starS = snapToInterviewAnchor(aiEval.star?.s, [0, 2, 4, 6]);
@@ -461,7 +510,12 @@ export function buildInterviewEvaluationReport(options: {
   const categories: InterviewCategoryScore[] = [
     {
       key: "star",
-      name: questionKind === "personality" ? "논리·행동 구조" : "STAR 구조",
+      name:
+        questionKind === "personality"
+          ? "논리·행동 구조"
+          : questionKind === "self_intro"
+            ? "도입·핵심경험 구조"
+            : "STAR 구조",
       score: starScore,
       maxScore: 25,
       label: starScore >= 20 ? "우수" : starScore >= 14 ? "보통" : "개선 필요",
@@ -562,6 +616,7 @@ export function buildInterviewEvaluationReport(options: {
     scoreFormulaNote,
     grade: determineInterviewGrade(totalScore),
     charCount: conciseness.charCount,
+    estimatedSpeechSeconds: conciseness.estimatedSpeechSeconds,
     metricCount: detMetrics.metricCount,
     categories,
     feedback3Lines,

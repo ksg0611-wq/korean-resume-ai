@@ -7,7 +7,11 @@ import {
   refundInterviewEvaluation,
   reserveInterviewEvaluation,
 } from "@/lib/interviewSession";
-import { evaluateInterviewAnswerWithAI } from "@/lib/interviewGenerator";
+import {
+  evaluateInterviewAnswerWithAI,
+  SELF_INTRO_QUESTION,
+  SELF_INTRO_QUESTION_ID,
+} from "@/lib/interviewGenerator";
 import {
   buildFreeEvaluationResponse,
   buildInterviewEvaluationReport,
@@ -43,10 +47,16 @@ export async function POST(req: Request) {
       );
     }
 
-    if (userAnswer.length < 100 || userAnswer.length > 800) {
+    const isSelfIntroMode = questionId === SELF_INTRO_QUESTION_ID;
+    const minAnswerChars = isSelfIntroMode ? 80 : 100;
+    const maxAnswerChars = isSelfIntroMode ? 600 : 800;
+
+    if (userAnswer.length < minAnswerChars || userAnswer.length > maxAnswerChars) {
       return NextResponse.json(
         {
-          error: `면접 답변은 공백 포함 100자 이상 800자 이내로 입력해 주세요. (현재 ${userAnswer.length}자)`,
+          error: isSelfIntroMode
+            ? `1분 자기소개 대본은 공백 포함 80자 이상 600자 이내로 입력해 주세요. (현재 ${userAnswer.length}자)`
+            : `면접 답변은 공백 포함 100자 이상 800자 이내로 입력해 주세요. (현재 ${userAnswer.length}자)`,
           code: "INVALID_ANSWER_LENGTH",
         },
         { status: 400 }
@@ -77,8 +87,10 @@ export async function POST(req: Request) {
     reservedLockToken = reservation.lockToken;
     const { session, quota } = reservation;
 
-    // 2) 문항 및 꼬리질문 단계 유효성 검증
-    const targetQuestion = session.questions.find((q) => q.id === questionId);
+    // 2) 문항 및 꼬리질문 단계 유효성 검증 (1분 자기소개 가상 문항 포함)
+    const targetQuestion = isSelfIntroMode
+      ? SELF_INTRO_QUESTION
+      : session.questions.find((q) => q.id === questionId);
     if (!targetQuestion) {
       const refunded = await refundInterviewEvaluation({
         sessionId,
@@ -152,6 +164,7 @@ export async function POST(req: Request) {
       userAnswer,
       priorHistory,
       generateNextFollowUp: depth < 3,
+      jobContext: session.jobContext ?? null,
     });
 
     const allowedSourceText = [
