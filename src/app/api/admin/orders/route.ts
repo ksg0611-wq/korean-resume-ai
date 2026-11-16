@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
-import { timingSafeEqualStrings } from "@/lib/results";
+import {
+  getConfiguredAdminSecret,
+  isAdminRequestAuthorized,
+  isTestPaymentMode,
+} from "@/lib/adminAuth";
 import {
   isOrderMismatch,
   isOrderStuck,
@@ -7,24 +11,12 @@ import {
   type AdminOrderFilter,
 } from "@/lib/orders";
 import { reportServerError } from "@/lib/alerts";
+import { getDailyFreeMetricsSummary } from "@/lib/freeMetrics";
 
 export const dynamic = "force-dynamic";
 
-function extractProvidedSecret(req: Request): string {
-  const headerSecret = req.headers.get("x-admin-secret")?.trim();
-  if (headerSecret) return headerSecret;
-
-  const authHeader = req.headers.get("authorization")?.trim() || "";
-  if (authHeader.toLowerCase().startsWith("bearer ")) {
-    return authHeader.slice(7).trim();
-  }
-  return "";
-}
-
-import { getDailyFreeMetricsSummary } from "@/lib/freeMetrics";
-
 export async function GET(req: Request) {
-  const configuredSecret = process.env.ADMIN_SECRET?.trim();
+  const configuredSecret = getConfiguredAdminSecret();
   if (!configuredSecret) {
     return NextResponse.json(
       { error: "ADMIN_SECRET is not configured on the server." },
@@ -32,8 +24,7 @@ export async function GET(req: Request) {
     );
   }
 
-  const providedSecret = extractProvidedSecret(req);
-  if (!providedSecret || !timingSafeEqualStrings(providedSecret, configuredSecret)) {
+  if (!isAdminRequestAuthorized(req)) {
     return NextResponse.json(
       { error: "Unauthorized" },
       { status: 401, headers: { "Cache-Control": "no-store" } }
@@ -64,6 +55,7 @@ export async function GET(req: Request) {
       {
         success: true,
         filter,
+        testPaymentMode: isTestPaymentMode(),
         freeMetrics,
         summary: data.summary,
         orders: data.orders.map((order) => ({

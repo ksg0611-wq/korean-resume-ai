@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import Link from "next/link";
 import type { DailyFreeMetricsSummary } from "@/lib/freeMetrics";
 import type { AdminOrderFilter, AdminOrderSummary } from "@/lib/orders";
 import type { OrderRecord } from "@/lib/results";
@@ -38,6 +39,8 @@ function fmtTime(iso?: string | null): string {
 export default function AdminOrdersClient() {
   const [secretInput, setSecretInput] = useState("");
   const [authenticatedSecret, setAuthenticatedSecret] = useState<string | null>(null);
+  const [isCookieAuthenticated, setIsCookieAuthenticated] = useState(false);
+  const [testPaymentMode, setTestPaymentMode] = useState(false);
   const [filter, setFilter] = useState<AdminOrderFilter>("all");
   const [searchOrderId, setSearchOrderId] = useState("");
   const [loading, setLoading] = useState(false);
@@ -47,7 +50,7 @@ export default function AdminOrdersClient() {
   const [orders, setOrders] = useState<AdminOrderRow[]>([]);
 
   const fetchOrders = async (
-    secret: string,
+    secret: string | null,
     nextFilter: AdminOrderFilter = filter,
     orderIdQuery: string = searchOrderId
   ) => {
@@ -59,11 +62,15 @@ export default function AdminOrdersClient() {
         params.set("orderId", orderIdQuery.trim());
       }
 
+      const headers: Record<string, string> = {};
+      if (secret) {
+        headers["x-admin-secret"] = secret;
+      }
+
       const res = await fetch(`/api/admin/orders?${params.toString()}`, {
         method: "GET",
-        headers: {
-          "x-admin-secret": secret,
-        },
+        headers,
+        credentials: "include",
         cache: "no-store",
       });
 
@@ -71,12 +78,17 @@ export default function AdminOrdersClient() {
       if (!res.ok) {
         if (res.status === 401) {
           setAuthenticatedSecret(null);
+          setIsCookieAuthenticated(false);
         }
         setError(data?.error || `조회 실패 (HTTP ${res.status})`);
         return;
       }
 
-      setAuthenticatedSecret(secret);
+      if (secret) {
+        setAuthenticatedSecret(secret);
+      }
+      setIsCookieAuthenticated(true);
+      setTestPaymentMode(Boolean(data.testPaymentMode));
       setFreeMetrics(data.freeMetrics || null);
       setSummary(data.summary);
       setOrders(data.orders || []);
@@ -87,30 +99,74 @@ export default function AdminOrdersClient() {
     }
   };
 
+  useEffect(() => {
+    let active = true;
+    fetch("/api/admin/session", { credentials: "include", cache: "no-store" })
+      .then((res) => res.json().catch(() => null))
+      .then((data) => {
+        if (!active || !data) return;
+        setTestPaymentMode(Boolean(data.testPaymentMode));
+        if (data.authenticated) {
+          setIsCookieAuthenticated(true);
+          fetchOrders(null, "all", "");
+        }
+      })
+      .catch(() => {
+        // ignore startup check error
+      });
+    return () => {
+      active = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!secretInput.trim()) {
+    const cleanSecret = secretInput.trim();
+    if (!cleanSecret) {
       setError("ADMIN_SECRET을 입력해 주세요.");
       return;
     }
-    await fetchOrders(secretInput.trim(), filter, searchOrderId);
+
+    setLoading(true);
+    setError("");
+    try {
+      const sessionRes = await fetch("/api/admin/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ secret: cleanSecret }),
+      });
+      const sessionData = await sessionRes.json().catch(() => null);
+      if (!sessionRes.ok) {
+        setLoading(false);
+        setError(sessionData?.error || `인증 실패 (HTTP ${sessionRes.status})`);
+        return;
+      }
+      setTestPaymentMode(Boolean(sessionData?.testPaymentMode));
+      setIsCookieAuthenticated(true);
+      await fetchOrders(cleanSecret, filter, searchOrderId);
+    } catch {
+      setLoading(false);
+      setError("관리자 세션 발급 중 네트워크 오류가 발생했습니다.");
+    }
   };
 
   const handleFilterChange = async (nextFilter: AdminOrderFilter) => {
     setFilter(nextFilter);
-    if (authenticatedSecret) {
+    if (isCookieAuthenticated || authenticatedSecret) {
       await fetchOrders(authenticatedSecret, nextFilter, searchOrderId);
     }
   };
 
   const handleSearchSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (authenticatedSecret) {
+    if (isCookieAuthenticated || authenticatedSecret) {
       await fetchOrders(authenticatedSecret, filter, searchOrderId);
     }
   };
 
-  if (!authenticatedSecret) {
+  if (!isCookieAuthenticated && !authenticatedSecret) {
     return (
       <main className="flex-1 bg-gray-50 flex items-center justify-center px-4 py-12">
         <div className="max-w-md w-full bg-white p-8 rounded-2xl shadow-sm border border-gray-200">
@@ -179,8 +235,13 @@ export default function AdminOrdersClient() {
             </button>
             <button
               type="button"
-              onClick={() => {
+              onClick={async () => {
+                await fetch("/api/admin/session", {
+                  method: "DELETE",
+                  credentials: "include",
+                }).catch(() => {});
                 setAuthenticatedSecret(null);
+                setIsCookieAuthenticated(false);
                 setSecretInput("");
                 setOrders([]);
                 setFreeMetrics(null);
@@ -190,6 +251,40 @@ export default function AdminOrdersClient() {
             >
               잠금(로그아웃)
             </button>
+          </div>
+        </div>
+
+        {/* 관리자 세션 쿠키 및 테스트 결제 잠금 안내 배너 */}
+        <div
+          className={`p-4 rounded-xl border flex flex-wrap items-center justify-between gap-3 text-xs ${
+            testPaymentMode
+              ? "bg-blue-50 border-blue-200 text-blue-900"
+              : "bg-emerald-50 border-emerald-200 text-emerald-900"
+          }`}
+        >
+          <div className="space-y-0.5">
+            <p className="font-bold">
+              {testPaymentMode
+                ? "관리자 세션 쿠키 활성화됨 (테스트 결제 잠금 모드 · 일반 방문자 차단 중)"
+                : "관리자 세션 쿠키 활성화됨 (라이브 결제 모드)"}
+            </p>
+            <p className="opacity-85">
+              현재 브라우저(모바일·카카오톡 인앱 포함)에서 일반 사용자에게 숨겨진 결제창·API 테스트가 가능합니다.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href="/"
+              className="px-3 py-1.5 bg-white border border-blue-200 text-blue-700 hover:bg-blue-100 font-bold rounded-lg"
+            >
+              홈 결제창 이동 →
+            </Link>
+            <Link
+              href="/interview"
+              className="px-3 py-1.5 bg-white border border-blue-200 text-blue-700 hover:bg-blue-100 font-bold rounded-lg"
+            >
+              면접 결제창 이동 →
+            </Link>
           </div>
         </div>
 
