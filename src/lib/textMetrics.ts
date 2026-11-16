@@ -91,7 +91,7 @@ export function countResumeMetrics(text: string, targetChars: number = 700): Tex
  * - "실제로", "문제로"처럼 앞뒤에 한글/영문이 붙은 단어 내부 "제로"는 제외
  */
 const UNVERIFIED_QUANT_REGEX =
-  /(?:\d+(?:,\d+)*(?:\.\d+)?)[ \t]*(?:(?:천|만|억|조)[ \t]*(?:여[ \t]*)?(?:원|명|건|배|시간)?|%p?|퍼센트(?:포인트)?|원|건|명|배|시간)|(?<![A-Za-z0-9가-힣])(?:Zero|ZERO|zero|제로(?:[ \t]*(?:원|건|명|배|시간|%))?)(?![A-Za-z0-9가-힣])/g;
+  /(?:\d+(?:,\d+)*(?:\.\d+)?)[ \t]*(?:(?:천|만|억|조)[ \t]*(?:여[ \t]*)?(?:원|명|건|배|시간)?|%p?|퍼센트(?:포인트)?|(?:여[ \t]*)?(?:원|건|명|배|시간))|(?<![A-Za-z0-9가-힣])(?:Zero|ZERO|zero|제로(?:[ \t]*(?:원|건|명|배|시간|%))?)(?![A-Za-z0-9가-힣])/g;
 
 export const UNVERIFIED_METRIC_PLACEHOLDER = "[본인 수치 입력]";
 
@@ -103,7 +103,8 @@ function normalizeQuantKey(rawToken: string): string {
     .replace(/퍼센트포인트/g, "%p")
     .replace(/퍼센트/g, "%")
     .replace(/^제로/, "zero")
-    .replace(/(천|만|억|조)여/g, "$1");
+    .replace(/(천|만|억|조)여/g, "$1")
+    .replace(/(\d)여(원|명|건|배|시간)/g, "$1$2");
 }
 
 function extractVerifiedQuantKeys(sourceText: string): Set<string> {
@@ -144,4 +145,70 @@ export function sanitizeUnverifiedNumbers(generatedText: string, sourceText: str
     }
     return UNVERIFIED_METRIC_PLACEHOLDER;
   });
+}
+
+const QUESTION_METRIC_PHRASE_REGEX = new RegExp(
+  `(?:(?:약|대략|최대|최소|거의)[ \\t]+)?(${UNVERIFIED_QUANT_REGEX.source})(?:[ \\t]*(?:여|가량|정도|이상|이하|미만|초과|가까이|넘게|안팎|남짓))?`,
+  "g"
+);
+
+function inferQualitativeMetricPhrase(coreToken: string, afterText: string): string {
+  const trimmed = coreToken.trim();
+  if (/^(?:zero|제로)/i.test(trimmed)) {
+    return "전무한 수준";
+  }
+  if (/시간$/.test(trimmed)) {
+    return "상당한 시간";
+  }
+  if (/배$/.test(trimmed)) {
+    if (/^(?:으로|이|을|은)/.test(afterText)) {
+      return "상당 수준";
+    }
+    if (/^[로가를는의에와과]/.test(afterText)) {
+      return "여러 배";
+    }
+    return "크게";
+  }
+  if (/(?:%p?|퍼센트(?:포인트)?)$/.test(trimmed)) {
+    return "상당 수준";
+  }
+  if (/원$/.test(trimmed)) {
+    return "상당 금액";
+  }
+  if (/건$/.test(trimmed)) {
+    return "여러 건";
+  }
+  if (/명$/.test(trimmed)) {
+    return "여러 명";
+  }
+  return "상당 규모";
+}
+
+/**
+ * 면접 질문(15Q/3Q)·의도 문구 전용 수치 후처리 가드:
+ * - [본인 수치 입력] 대괄호 표기를 절대 삽입하지 않고 자연스러운 한국어 정성 표현으로 대체
+ * - 자소서 원문에 존재하는 검증된 수치는 그대로 유지
+ */
+export function sanitizeInterviewQuestionText(
+  questionText: string,
+  sourceText: string
+): string {
+  if (typeof questionText !== "string" || !questionText) {
+    return "";
+  }
+  const allowedKeys = extractVerifiedQuantKeys(sourceText);
+  const replaced = questionText.replace(
+    QUESTION_METRIC_PHRASE_REGEX,
+    (fullMatch, coreToken: string, offset: number, fullString: string) => {
+      if (allowedKeys.has(normalizeQuantKey(coreToken))) {
+        return fullMatch;
+      }
+      const afterText = fullString.slice(offset + fullMatch.length);
+      return inferQualitativeMetricPhrase(coreToken, afterText);
+    }
+  );
+  return replaced
+    .replace(/\[본인 수치 입력\]/g, "상당 수준")
+    .replace(/[ \t]{2,}/g, " ")
+    .trim();
 }
