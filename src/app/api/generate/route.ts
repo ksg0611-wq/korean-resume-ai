@@ -104,15 +104,15 @@ export async function POST(req: Request) {
       );
     }
 
-    // 다중 문항(draft) 시간 예산: 1차(30,000ms) + 폴백(20,000ms) <= 총 50,000ms
-    // (Vercel Serverless maxDuration = 60,000ms 대비 입출력·Redis 저장 10,000ms 안전 여유 확보)
+    // 다중 문항(draft) 시간 예산: 1차 WRITING_MODEL(42,000ms) + 폴백 FALLBACK_MODEL(12,000ms) <= 총 54,000ms
+    // (Vercel Serverless maxDuration = 60,000ms 대비 입출력·Redis 저장 6,000ms 안전 여유 확보)
     const draftResult = await generateFourQuestionsResume({
       genAI,
       jobTitle,
       memo,
-      perAttemptTimeoutMs: 30_000,
-      fallbackAttemptTimeoutMs: 20_000,
-      totalBudgetMs: 50_000,
+      perAttemptTimeoutMs: 42_000,
+      fallbackAttemptTimeoutMs: 12_000,
+      totalBudgetMs: 54_000,
     });
 
     let storedPreviewToken: string | null = null;

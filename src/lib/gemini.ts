@@ -13,8 +13,16 @@ export type ThinkingLevel = "minimal" | "low" | "medium" | "high";
  *   · 다중 4문항 일괄 생성(draft/final): 1차 30,000ms + 폴백 20,000ms <= 총 50,000ms (잔여 10,000ms: 입출력·Redis·응답 안전 여유)
  */
 export const GEMINI_CONFIG = {
+  /** 채점·진단 엔드포인트 (/api/diagnose, /api/interview/evaluate): 일관성 동일·원가 2.4배 절감 */
+  SCORING_MODEL: "gemini-3.8-flash",
+  /** 무료 체험 엔드포인트 (무료 진단·무료 면접 3문항) */
+  FREE_MODEL: "gemini-3.8-flash",
+  /** 유료·전환용 고품질 글쓰기 및 유료 15문항 출제 (/api/generate draft/paid, 유료 면접 15Q, 패키지 10Q) */
+  WRITING_MODEL: "gemini-4-hydrogen",
+  /** 1차 WRITING_MODEL 타임아웃·장애 시 즉시 전환되는 폴백 모델 */
+  FALLBACK_MODEL: "gemini-3.8-flash",
+  /** 하위 호환 기본 참조 */
   PRIMARY_MODEL: "gemini-3.8-flash",
-  FALLBACK_MODEL: "gemini-3.7-flash",
   THINKING_LEVEL: "medium" as ThinkingLevel,
   PER_ATTEMPT_TIMEOUT_MS: 20_000,
   FALLBACK_ATTEMPT_TIMEOUT_MS: 20_000,
@@ -134,13 +142,13 @@ export async function generateContentWithFallback(
   options?: GenerateOptions
 ): Promise<GenerateResult> {
   const perAttemptTimeoutMs = options?.perAttemptTimeoutMs
-    ? Math.min(options.perAttemptTimeoutMs, 35_000)
+    ? Math.min(options.perAttemptTimeoutMs, 45_000)
     : GEMINI_CONFIG.PER_ATTEMPT_TIMEOUT_MS;
   const fallbackAttemptTimeoutMs = options?.fallbackAttemptTimeoutMs
     ? Math.min(options.fallbackAttemptTimeoutMs, 25_000)
     : Math.min(perAttemptTimeoutMs, GEMINI_CONFIG.FALLBACK_ATTEMPT_TIMEOUT_MS);
   const totalBudgetMs = options?.totalBudgetMs
-    ? Math.min(options.totalBudgetMs, 50_000)
+    ? Math.min(options.totalBudgetMs, 55_000)
     : GEMINI_CONFIG.TOTAL_BUDGET_MS;
 
   const modelsToTry = Array.from(

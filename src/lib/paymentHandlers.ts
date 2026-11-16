@@ -214,7 +214,7 @@ export async function executePaidGeneration(options: {
     const genResult = await generateContentWithFallback(
       genAI,
       prompt,
-      GEMINI_CONFIG.PRIMARY_MODEL,
+      GEMINI_CONFIG.WRITING_MODEL,
       GEMINI_CONFIG.THINKING_LEVEL
     );
 
@@ -480,7 +480,7 @@ export async function executePaidPackageGeneration(options: {
         usedModel:
           interviewModelUsed ||
           consumedPreview.usedModel ||
-          GEMINI_CONFIG.PRIMARY_MODEL,
+          GEMINI_CONFIG.WRITING_MODEL,
         items: consumedPreview.items,
         interviewQuestions,
         interviewPending,
@@ -507,7 +507,7 @@ export async function executePaidPackageGeneration(options: {
         items: consumedPreview.items,
         interviewQuestions,
         sourceMemo: consumedPreview.memo || cleanMemo || "",
-        usedModel: completed.order.usedModel || GEMINI_CONFIG.PRIMARY_MODEL,
+        usedModel: completed.order.usedModel || GEMINI_CONFIG.WRITING_MODEL,
         thinkingLevel: consumedPreview.thinkingLevel || GEMINI_CONFIG.THINKING_LEVEL,
         resultToken: completed.resultUrl.split("token=")[1] || "",
         order: {
@@ -566,16 +566,16 @@ export async function executePaidPackageGeneration(options: {
             .slice(0, 6)
         : undefined;
 
-    // 4문항 완성본 + 10개 면접 질문 병렬 생성 (Vercel 60초 예산 방어)
+    // 4문항 완성본 + 10개 면접 질문 병렬 생성 (Vercel 60초 예산: 1차 42s + 폴백 12s + 환불 <= 60s)
     const [resumeOutcome, interviewOutcome] = await Promise.all([
       generateFourQuestionsResume({
         genAI,
         jobTitle: effectiveJobTitle,
         memo: effectiveMemo,
         revisionWeaknesses,
-        perAttemptTimeoutMs: 30_000,
-        fallbackAttemptTimeoutMs: 20_000,
-        totalBudgetMs: 50_000,
+        perAttemptTimeoutMs: 42_000,
+        fallbackAttemptTimeoutMs: 12_000,
+        totalBudgetMs: 54_000,
       }),
       generateTenInterviewQuestions({
         genAI,
@@ -670,6 +670,14 @@ export async function executePaidPackageGeneration(options: {
       },
     });
   } catch (genError) {
+    // Vercel maxDuration(60s) 내 1차(42s)+폴백(12s) 초과 직후에도 고객 자동 환불이 선행되도록 즉시 실행
+    const failure = await handlePaidGenerationFailure({
+      orderKey: begin.orderKey,
+      order,
+      error: genError,
+      route: routePath,
+    });
+
     await reportServerError({
       route: routePath,
       statusCode: 500,
@@ -679,14 +687,8 @@ export async function executePaidPackageGeneration(options: {
       extra: {
         stage: "gemini_paid_package_generation",
         usedCount: order.usedCount ?? 0,
+        failureOutcome: failure.outcome,
       },
-    });
-
-    const failure = await handlePaidGenerationFailure({
-      orderKey: begin.orderKey,
-      order,
-      error: genError,
-      route: routePath,
     });
 
     if (failure.outcome === "refunded") {

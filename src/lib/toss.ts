@@ -114,12 +114,19 @@ export async function cancelTossPayment(options: {
   cancelReason: string;
   orderId: string;
   route?: string;
+  timeoutMs?: number;
 }): Promise<TossCancelResult> {
-  const { paymentKey, cancelReason, orderId, route = "/api/generate" } = options;
+  const {
+    paymentKey,
+    cancelReason,
+    orderId,
+    route = "/api/generate",
+    timeoutMs = 8000,
+  } = options;
 
   try {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 8000);
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
       const response = await fetch(

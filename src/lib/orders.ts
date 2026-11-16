@@ -816,11 +816,13 @@ export async function handlePaidGenerationFailure(options: {
   }
 
   const cancelReason = "AI 생성 시스템 오류로 인한 자동 전액 환불";
+  // Vercel maxDuration(60s) 내 1차(42s)+폴백(12s) 실패 후에도 환불·상태 저장이 완료되도록 4초 상한 적용
   const cancelResult = await cancelTossPayment({
     paymentKey: order.paymentKey,
     cancelReason,
     orderId: order.orderId,
     route,
+    timeoutMs: 4000,
   });
 
   if (cancelResult.ok) {

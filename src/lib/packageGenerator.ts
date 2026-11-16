@@ -1,6 +1,10 @@
 import { GoogleGenerativeAI, SchemaType, type Schema } from "@google/generative-ai";
 import { GEMINI_CONFIG, generateContentWithFallback } from "@/lib/gemini";
-import { countResumeMetrics, sanitizeUnverifiedNumbers } from "@/lib/textMetrics";
+import {
+  countResumeMetrics,
+  sanitizeInterviewQuestionText,
+  sanitizeUnverifiedNumbers,
+} from "@/lib/textMetrics";
 import { detectBlindViolations } from "@/lib/blindCheck";
 import type { AIAnchorEvaluation } from "@/lib/diagnoseRubric";
 import { STANDARD_RESUME_QUESTIONS } from "@/lib/policy";
@@ -224,7 +228,7 @@ ${text.trim()}`;
   const genResult = await generateContentWithFallback(
     genAI,
     prompt,
-    GEMINI_CONFIG.PRIMARY_MODEL,
+    GEMINI_CONFIG.SCORING_MODEL,
     "low",
     {
       temperature: 0,
@@ -362,9 +366,9 @@ export async function generateFourQuestionsResume(options: {
     jobTitle,
     memo,
     revisionWeaknesses,
-    perAttemptTimeoutMs = 30_000,
-    fallbackAttemptTimeoutMs = 20_000,
-    totalBudgetMs = 50_000,
+    perAttemptTimeoutMs = 42_000,
+    fallbackAttemptTimeoutMs = 12_000,
+    totalBudgetMs = 54_000,
   } = options;
 
   const isRevision = Array.isArray(revisionWeaknesses) && revisionWeaknesses.length > 0;
@@ -397,7 +401,7 @@ ${revisionBlock}
   const genResult = await generateContentWithFallback(
     genAI,
     prompt,
-    GEMINI_CONFIG.PRIMARY_MODEL,
+    GEMINI_CONFIG.WRITING_MODEL,
     GEMINI_CONFIG.THINKING_LEVEL,
     {
       perAttemptTimeoutMs,
@@ -488,7 +492,7 @@ ${resumeContext.trim()}
   const genResult = await generateContentWithFallback(
     genAI,
     prompt,
-    GEMINI_CONFIG.PRIMARY_MODEL,
+    GEMINI_CONFIG.WRITING_MODEL,
     "low",
     {
       perAttemptTimeoutMs: 28_000,
@@ -509,9 +513,15 @@ ${resumeContext.trim()}
   const questions: InterviewQuestionItem[] = rawQuestions.slice(0, 10).map((q, idx) => ({
     number: typeof q.number === "number" ? q.number : idx + 1,
     category: String(q.category || "직무·경험 검증"),
-    question: String(q.question || "").trim(),
-    intent: String(q.intent || "지원 직무 수행 역량 및 사실관계 진위를 검증합니다.").trim(),
-    answerTip: String(q.answerTip || "결론부터 말한 뒤 본인이 수행한 구체적 액션과 근거를 제시하세요.").trim(),
+    question: sanitizeInterviewQuestionText(String(q.question || "").trim(), resumeContext),
+    intent: sanitizeInterviewQuestionText(
+      String(q.intent || "지원 직무 수행 역량 및 사실관계 진위를 검증합니다.").trim(),
+      resumeContext
+    ),
+    answerTip: sanitizeInterviewQuestionText(
+      String(q.answerTip || "결론부터 말한 뒤 본인이 수행한 구체적 액션과 근거를 제시하세요.").trim(),
+      resumeContext
+    ),
   }));
 
   return {
