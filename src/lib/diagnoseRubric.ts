@@ -1,6 +1,6 @@
 import {
   countResumeMetrics,
-  sanitizeUnverifiedNumbers,
+  sanitizeUnverifiedResumeText,
   type TextMetrics,
 } from "./textMetrics";
 import { detectBlindViolations, type BlindCheckResult } from "./blindCheck";
@@ -348,7 +348,7 @@ export function buildDiagnosticReport(
 
   const sampleFix: SampleFix = {
     ...rawSampleFix,
-    afterExample: sanitizeUnverifiedNumbers(rawSampleFix.afterExample, text),
+    afterExample: sanitizeUnverifiedResumeText(rawSampleFix.afterExample, text),
   };
 
   // 약점 정렬: 블라인드 위반 최우선, 그 다음 high -> medium 순

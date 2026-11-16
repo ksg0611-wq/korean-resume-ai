@@ -4,6 +4,7 @@ import {
   countResumeMetrics,
   sanitizeInterviewQuestionText,
   sanitizeUnverifiedNumbers,
+  sanitizeUnverifiedResumeText,
 } from "@/lib/textMetrics";
 import { detectBlindViolations } from "@/lib/blindCheck";
 import type { AIAnchorEvaluation } from "@/lib/diagnoseRubric";
@@ -220,9 +221,10 @@ export async function evaluateDiagnosisWithAI(options: {
   10: 문항의 모든 세부 요구 조건에 군더더기 없이 정면으로 답변함
 
 [약점(weaknesses) 및 수정 예시(sampleFix) 규칙]
-- weaknesses는 가장 치명적인 순으로 4~5건을 작성하세요 (severity는 "high" 또는 "medium").
+- weaknesses는 가장 치명적인 순으로 4~5건을 작성하세요 (severity는 "high" 또는 "medium"). 공고 자격요건·우대사항 대비 부족한 역량은 **오직 weaknesses 항목에서만** 지적하세요.
 - 블라인드 위반 여부·단어 위치는 서버 규칙 엔진이 별도로 잠금 처리하므로 weaknesses와 sampleFix에 출신 학교명·가족·출신지 등 블라인드 위반 단어나 위치를 절대 인용하거나 언급하지 마세요. 오직 STAR 구조, 수치·역할 구체성, 직무/문항 적합성, 문장 설득력 약점만 작성하세요.
-- sampleFix는 원문에서 블라인드 정보와 무관한 일반 경험 문장 1~2개를 beforeExcerpt에 그대로 발췌하고, afterExample에서 설득력 있는 완성도 높은 문장으로 개선하세요. 단, 원문에 없는 %, 원, 만, 억, 건, 명, 배, 시간, Zero 등 성과 수치를 절대 지어내지 말고 수치가 필요한 자리는 반드시 "[본인 수치 입력]"으로만 표기하세요.
+- **[경험·행동·자격 날조 절대 금지]** sampleFix는 원문에서 블라인드 정보와 무관한 일반 경험 문장 1~2개를 beforeExcerpt에 그대로 발췌하고, afterExample에서는 **지원자가 원문에 직접 적은 사실(한 일, 맡은 역할, 사용한 도구, 실제 결과)만 STAR 구조로 문장만 다듬으세요.**
+- **원문에 없는 새로운 행동("단순 정리 보조"를 "표준 분류 기준에 맞춰 재분류/체계 정립"으로 부풀리기 등), 원문에 없는 자격증(~기사, ~자격증, 컴활, 한국사), 시스템·툴(RMS, ERP, SAP, SQL, 파이썬), 과장 직책(총괄, 팀장, 리드)은 절대 지어내지 마세요.** 추가 경험·자격·수치가 들어가야 하는 빈자리는 반드시 \`[해당 경험이 있다면 입력: 예) 기록물 분류 기준 적용 경험]\` 및 \`[본인 수치 입력]\` 자리표시로만 표기하세요.
 
 [참고 규칙 기반 사전 측정]
 - 공백 포함 글자수: ${detMetrics.charCount}자 (목표 ${targetChars}자)
@@ -415,8 +417,9 @@ ${revisionBlock}
    - id: "q4", order: 4, title: "${STANDARD_RESUME_QUESTIONS[3].title}"
 2. 분량 제한: 각 문항 본문(body)은 **공백 포함 450자~550자 내외**(최소 420자, 최대 580자)로 밀도 있게 작성하세요.
 3. **절대 금지(허위 수치·성과 창작 및 Zero 표기 금지)**: 지원자 입력 원문에 없는 퍼센트(%), 금액(원/만/억), 건수(건), 인원(명), 배수(배), 소요시간(시간), Zero/0건 등 구체적 수치·성과를 절대 임의로 창작(환각)하지 마세요! 수치를 넣으면 설득력이 높아지는 자리에는 반드시 \`[본인 수치 입력]\` 플레이스홀더(예: \`처리 시간을 [본인 수치 입력] 단축\`)로만 출력해 지원자가 직접 확인·기입하도록 안내하세요.
-4. **블라인드 채용 완벽 준수**: 학교명(OO대 등), 출신 지역, 가족 직업/직위, 성별, 나이, 출생연도를 절대 포함하지 마세요.
-5. 각 문항마다 두괄식 소제목이나 핵심 결론 문장을 첫 문장에 배치하고, STAR(상황-과제-행동-결과)가 자연스럽게 연결되도록 서술하세요.`;
+4. **절대 금지(경험·자격·도구·직책 날조 금지)**: **지원자가 원문에 직접 적은 사실(한 일, 맡은 역할, 사용한 도구, 실제 결과)만 STAR 구조로 다듬고 재구성하세요.** "보조 업무"를 "기준 정립/체계 구축"으로 과장하지 마세요. 공고 요건(자격요건·우대사항)에 맞는 경험·자격증(\`~기사\`, \`컴활\`, \`한국사\` 등)·전문 시스템/툴(\`RMS\`, \`ERP\`, \`SAP\`, \`SQL\`, \`파이썬\` 등)·직책(\`총괄\`, \`팀장\`, \`리드\` 등)이 원문에 없다면 **절대 지어내지 말고 반드시 \`[해당 경험이 있다면 입력: 예) 기록물 분류 기준 적용 경험]\` 형태의 자리표시**로만 남기세요.
+5. **블라인드 채용 완벽 준수**: 학교명(OO대 등), 출신 지역, 가족 직업/직위, 성별, 나이, 출생연도를 절대 포함하지 마세요.
+6. 각 문항마다 두괄식 소제목이나 핵심 결론 문장을 첫 문장에 배치하고, STAR(상황-과제-행동-결과)가 자연스럽게 연결되도록 서술하세요.`;
 
   const genResult = await generateContentWithFallback(
     genAI,
@@ -449,8 +452,8 @@ ${revisionBlock}
     if (!rawBody) {
       throw new Error(`Missing body for standard question ${std.id}`);
     }
-    // 입력 원문에 존재하지 않는 성과·정량 수치 후처리 차단 ([본인 수치 입력] 치환)
-    const cleanBody = sanitizeUnverifiedNumbers(rawBody, memo);
+    // 입력 원문에 존재하지 않는 성과 수치 및 미검증 자격증·시스템/툴·과장 직책 후처리 차단
+    const cleanBody = sanitizeUnverifiedResumeText(rawBody, memo);
     const metrics = countResumeMetrics(cleanBody, std.targetChars);
     return {
       id: std.id,

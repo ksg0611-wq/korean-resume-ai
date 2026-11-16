@@ -1,6 +1,7 @@
 import {
   countResumeMetrics,
   sanitizeUnverifiedNumbers,
+  sanitizeUnverifiedResumeText,
   UNVERIFIED_METRIC_PLACEHOLDER,
 } from "./textMetrics";
 
@@ -585,7 +586,7 @@ export function buildInterviewEvaluationReport(options: {
     allowedSourceText
   );
 
-  const sanitizedModelAnswer = sanitizeUnverifiedNumbers(
+  const sanitizedModelAnswer = sanitizeUnverifiedResumeText(
     (typeof aiEval.modelAnswer === "string" && aiEval.modelAnswer.trim()) ||
       "질문의 핵심에 맞춰 상황, 본인의 주도적 판단과 실행, 그리고 검증 가능한 결과를 두괄식으로 정리해 답변하시기 바랍니다.",
     allowedSourceText

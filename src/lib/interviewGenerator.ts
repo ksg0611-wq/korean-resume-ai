@@ -3,6 +3,7 @@ import { GEMINI_CONFIG, generateContentWithFallback } from "@/lib/gemini";
 import {
   sanitizeInterviewQuestionText,
   sanitizeUnverifiedNumbers,
+  sanitizeUnverifiedResumeText,
 } from "@/lib/textMetrics";
 import type { InterviewJobContext } from "@/lib/interviewSession";
 import {
@@ -451,7 +452,7 @@ export async function evaluateInterviewAnswerWithAI(options: {
 [3. 피드백 · 파고들 지점 · 모범 답변 · 꼬리질문 규칙]
 - feedback3Lines: 강점/논리·구체성 보완/직무·공공기관 관점 조언을 정확히 3개 문자열(각 55자 이내)로 작성.
 - digPoint: 직전 답변에서 면접관이 파고들어야 할 가장 치명적인 빈틈 1문장(55자 이내).
-- modelAnswer: 지원자의 실제 경험·수치 맥락만 살려 200~320자 분량의 간결한 두괄식 STAR 구술 모범 답변으로 작성하세요. **자소서와 답변 원문에 없는 %, 원, 만, 억, 건, 명, 배, 시간, Zero 등 정량 수치를 절대 지어내지 말고, 수치가 필요한 자리는 반드시 "[본인 수치 입력]"으로만 적으세요.**
+- modelAnswer: 지원자가 자소서·답변 원문에 직접 적은 사실(한 일, 맡은 역할, 사용한 도구, 실제 결과)만 살려 200~320자 분량의 간결한 두괄식 STAR 구술 모범 답변으로 다듬으세요. **자소서와 답변 원문에 없는 수치(%, 원, 만, 억, 건, 명, 배, 시간, Zero), 자격증, 전문 시스템·툴(RMS/ERP/SQL 등), 과장 직책(총괄/팀장/리드 등), 공고 요건 경험을 절대 지어내지 말고, 필요한 자리는 반드시 "[본인 수치 입력]" 또는 "[해당 경험이 있다면 입력: 예) ...]" 자리표시로만 적으세요.**
 ${stageInstruction}
 
 [평가 대상 정보]
@@ -565,7 +566,7 @@ export async function generateSelfIntroScript(options: {
    - ① 첫 문장(도입 훅): 지원 분야·직무 핵심 정체성을 한 문장으로 두괄식 선언 (인사말은 "안녕하십니까" 정도로 간결하게)
    - ② 핵심 경험 근거(중간): 자소서에 실제 나온 1~2개 경험·행동·결과를 구술형 어조("~했습니다")로 자연스럽게 연결
    - ③ 입사 후 직무 포부(마무리): 공익 가치 또는 기관·직무 기여 방향 한 문장
-3. **수치 날조 절대 금지**: 자소서 원문에 없는 %, 원, 만, 억, 건, 명, 배, 시간, Zero 등 정량 수치를 절대 지어내지 말고, 수치가 필요한 자리는 반드시 "[본인 수치 입력]"으로만 표기하세요.
+3. **수치 및 경험 날조 절대 금지**: 지원자가 원문에 직접 적은 사실(한 일, 맡은 역할, 사용한 도구, 실제 결과)만 활용하세요. 원문에 없는 정량 수치, 자격증, 전문 시스템·툴, 과장 직책(총괄/팀장/리드)을 절대 지어내지 말고, 필요한 자리는 반드시 "[본인 수치 입력]" 또는 "[해당 경험이 있다면 입력: 예) ...]" 자리표시로만 표기하세요.
 4. 블라인드 면접 위반(출신 학교명·나이·가족·출신지) 표현은 절대 넣지 마세요.
 
 [지원 직무 분야]
@@ -596,7 +597,7 @@ ${resumeText.trim()}`;
     speakingTips?: string[];
   };
 
-  const sanitizedScript = sanitizeUnverifiedNumbers(
+  const sanitizedScript = sanitizeUnverifiedResumeText(
     (typeof parsed.script === "string" ? parsed.script.trim() : "") ||
       "안녕하십니까. 데이터와 규정 기반 문제해결 역량을 갖춘 인재로서 지원했습니다. 이전 경험에서 반복 비효율을 직접 진단하고 표준 절차를 구축해 개선한 바 있습니다. 입사 후에도 공공 서비스의 정확성과 신뢰를 높이는 실무자가 되겠습니다.",
     resumeText

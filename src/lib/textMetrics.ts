@@ -147,6 +147,198 @@ export function sanitizeUnverifiedNumbers(generatedText: string, sourceText: str
   });
 }
 
+export type UnverifiedClaimCategory =
+  | "certificate"
+  | "system_tool"
+  | "exaggerated_title";
+
+export interface UnverifiedClaim {
+  category: UnverifiedClaimCategory;
+  token: string;
+}
+
+const CLAIM_PLACEHOLDER_STRIP_REGEX = /\[(?:본인 수치 입력|해당 경험이 있다면 입력:[^\]]*)\]/g;
+
+const KO_END =
+  "(?=$|[^A-Za-z0-9가-힣]|은|는|이|가|을|를|와|과|의|에|도|만|로|으로|에서|부터|까지|처럼|보다|라고|이라는|이란)";
+
+const CERTIFICATE_REGEX = new RegExp(
+  `(?<![A-Za-z0-9])(?:TOEIC|TOPIK|OPIC|TOEFL)(?![A-Za-z0-9])|(?<![A-Za-z0-9가-힣])(?:컴퓨터활용능력(?:\\s*[12]급)?|컴활(?:\\s*[12]급)?|한국사능력검정시험(?:\\s*[1-6]급)?|한국사(?:\\s*[1-6]급)?|기록물관리\\s*전문요원(?:\\s*자격)?|정보처리기사|정보처리산업기사|사회조사분석사(?:\\s*[12]급)?|전산세무(?:\\s*[12]급)?|전산회계(?:\\s*[12]급)?|재경관리사|워드프로세서|토익|오픽|토플|공인노무사|공인회계사|세무사|[가-힣A-Za-z]{2,12}(?:산업기사|기술사|기능사|자격증|면허증))${KO_END}|(?<![A-Za-z0-9가-힣])(?!신문기사|보도기사|특집기사|속보기사|기획기사|운전기사|배달기사|택배기사|대리기사)[가-힣]{2,10}기사${KO_END}`,
+  "gi"
+);
+
+const SYSTEM_TOOL_REGEX = new RegExp(
+  `(?<![A-Za-z0-9])(?:RMS|ERP|SAP|MySQL|PostgreSQL|SQL|Oracle|Python|SPSS|SAS|Power\\s*BI|Tableau|AutoCAD|HRIS|CRM|MES|WMS|LMS|AWS|Docker|Kubernetes|TypeScript|JavaScript|React|Excel|VBA)(?![A-Za-z0-9])|(?<![A-Za-z0-9가-힣])(?:파이썬|태블로|오토캐드|엑셀|매크로)${KO_END}`,
+  "gi"
+);
+
+const EXAGGERATED_TITLE_REGEX = new RegExp(
+  `(?<![A-Za-z0-9])(?:PM|PL|Tech\\s*Lead)(?![A-Za-z0-9])|(?<![A-Za-z0-9가-힣])(?:총괄(?:\\s*(?:책임자|매니저|담당자?|팀장|리더|리드))?|팀장|파트장|본부장|실장|센터장|프로젝트\\s*(?:리더|리드|매니저|총괄|책임자)|리드(?:\\s*(?:역할|담당|업무|직책|포지션|경험))?)${KO_END}`,
+  "gi"
+);
+
+function normalizeClaimKey(category: UnverifiedClaimCategory, token: string): string {
+  return `${category}:${token.toLowerCase().replace(/\s+/g, "")}`;
+}
+
+function extractVerifiedClaimKeys(sourceText: string): Set<string> {
+  const keys = new Set<string>();
+  if (typeof sourceText !== "string" || !sourceText.trim()) {
+    return keys;
+  }
+
+  const addMatches = (category: UnverifiedClaimCategory, regex: RegExp) => {
+    const flags = regex.flags.includes("g") ? regex.flags : `${regex.flags}g`;
+    const clone = new RegExp(regex.source, flags);
+    let match: RegExpExecArray | null;
+    while ((match = clone.exec(sourceText)) !== null) {
+      keys.add(normalizeClaimKey(category, match[0]));
+      // 원문에 "총괄했다/총괄"이 있으면 관련 직책 표기도 허용 키로 등록
+      if (category === "exaggerated_title" && match[0].startsWith("총괄")) {
+        keys.add("exaggerated_title:총괄");
+      }
+      // 원문에 "컴퓨터활용능력"이 있으면 약칭 "컴활"도 허용, 그 반대도 허용
+      if (category === "certificate") {
+        const compact = match[0].toLowerCase().replace(/\s+/g, "");
+        if (compact.includes("컴퓨터활용능력")) keys.add("certificate:컴활");
+        if (compact.includes("컴활")) keys.add("certificate:컴퓨터활용능력");
+        if (compact.includes("한국사")) keys.add("certificate:한국사");
+      }
+    }
+  };
+
+  addMatches("certificate", CERTIFICATE_REGEX);
+  addMatches("system_tool", SYSTEM_TOOL_REGEX);
+  addMatches("exaggerated_title", EXAGGERATED_TITLE_REGEX);
+  return keys;
+}
+
+function scanMaskedGeneratedClaims(
+  maskedText: string,
+  allowedKeys: Set<string>
+): Array<{ category: UnverifiedClaimCategory; token: string; index: number; length: number }> {
+  const hits: Array<{ category: UnverifiedClaimCategory; token: string; index: number; length: number }> = [];
+  const check = (category: UnverifiedClaimCategory, regex: RegExp) => {
+    const flags = regex.flags.includes("g") ? regex.flags : `${regex.flags}g`;
+    const clone = new RegExp(regex.source, flags);
+    let m: RegExpExecArray | null;
+    while ((m = clone.exec(maskedText)) !== null) {
+      const token = m[0];
+      const key = normalizeClaimKey(category, token);
+      const hasPartialAllowed =
+        allowedKeys.has(key) ||
+        (category === "exaggerated_title" &&
+          token.startsWith("총괄") &&
+          allowedKeys.has("exaggerated_title:총괄")) ||
+        (category === "certificate" &&
+          ((token.includes("컴활") && allowedKeys.has("certificate:컴활")) ||
+            (token.includes("한국사") && allowedKeys.has("certificate:한국사"))));
+      if (!hasPartialAllowed) {
+        hits.push({ category, token, index: m.index, length: token.length });
+      }
+    }
+  };
+
+  check("certificate", CERTIFICATE_REGEX);
+  check("system_tool", SYSTEM_TOOL_REGEX);
+  check("exaggerated_title", EXAGGERATED_TITLE_REGEX);
+
+  hits.sort((a, b) => a.index - b.index || b.length - a.length);
+  const deduped: typeof hits = [];
+  let lastEnd = -1;
+  for (const h of hits) {
+    if (h.index < lastEnd) continue;
+    deduped.push(h);
+    lastEnd = h.index + h.length;
+  }
+
+  // 공백으로 이어진 동일 범주의 연속 툴/직책 표현(예: "엑셀 VBA 매크로")을 하나의 깔끔한 자리표시로 병합
+  const merged: typeof hits = [];
+  for (const h of deduped) {
+    const prev = merged[merged.length - 1];
+    if (prev && prev.category === h.category) {
+      const gap = maskedText.slice(prev.index + prev.length, h.index);
+      if (/^[ \t·/]+$/.test(gap)) {
+        const nextEnd = h.index + h.length;
+        prev.token = maskedText.slice(prev.index, nextEnd);
+        prev.length = nextEnd - prev.index;
+        continue;
+      }
+    }
+    merged.push({ ...h });
+  }
+  return merged;
+}
+
+/**
+ * 지원자 원문에 존재하지 않는 자격증명·전문 시스템/툴·과장 직책을 탐지해 반환
+ * (이미 [해당 경험이 있다면 입력: ...] / [본인 수치 입력] 자리표시 내부에 포함된 예시는 오탐 제외)
+ */
+export function findUnverifiedClaims(
+  generatedText: string,
+  sourceText: string
+): UnverifiedClaim[] {
+  if (typeof generatedText !== "string" || !generatedText) {
+    return [];
+  }
+  const masked = generatedText.replace(CLAIM_PLACEHOLDER_STRIP_REGEX, (m) =>
+    " ".repeat(m.length)
+  );
+  const allowedKeys = extractVerifiedClaimKeys(sourceText);
+  return scanMaskedGeneratedClaims(masked, allowedKeys).map(({ category, token }) => ({
+    category,
+    token,
+  }));
+}
+
+/**
+ * 지원자 원문에 존재하지 않는 자격증·전문 툴/시스템·과장 직책을
+ * `[해당 경험이 있다면 입력: 예) ...]` 자리표시로 자동 치환
+ */
+export function sanitizeUnverifiedClaims(
+  generatedText: string,
+  sourceText: string
+): string {
+  if (typeof generatedText !== "string" || !generatedText) {
+    return "";
+  }
+  const masked = generatedText.replace(CLAIM_PLACEHOLDER_STRIP_REGEX, (m) =>
+    " ".repeat(m.length)
+  );
+  const allowedKeys = extractVerifiedClaimKeys(sourceText);
+  const hits = scanMaskedGeneratedClaims(masked, allowedKeys);
+  if (hits.length === 0) {
+    return generatedText;
+  }
+
+  let out = "";
+  let cursor = 0;
+  for (const hit of hits) {
+    out += generatedText.slice(cursor, hit.index);
+    const labelHint =
+      hit.category === "certificate"
+        ? `${hit.token} 보유 및 활용 경험`
+        : hit.category === "system_tool"
+          ? `${hit.token} 활용 경험`
+          : `${hit.token} 역할 수행 경험`;
+    out += `[해당 경험이 있다면 입력: 예) ${labelHint}]`;
+    cursor = hit.index + hit.length;
+  }
+  out += generatedText.slice(cursor);
+  return out;
+}
+
+/**
+ * 수치 + 미검증 자격증·시스템/툴·과장 직책 일괄 후처리 차단
+ */
+export function sanitizeUnverifiedResumeText(
+  generatedText: string,
+  sourceText: string
+): string {
+  const numClean = sanitizeUnverifiedNumbers(generatedText, sourceText);
+  return sanitizeUnverifiedClaims(numClean, sourceText);
+}
+
 const QUESTION_METRIC_PHRASE_REGEX = new RegExp(
   `(?:(?:약|대략|최대|최소|거의)[ \\t]+)?(${UNVERIFIED_QUANT_REGEX.source})(?:[ \\t]*(?:여|가량|정도|이상|이하|미만|초과|가까이|넘게|안팎|남짓))?`,
   "g"

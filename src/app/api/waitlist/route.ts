@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { dbQuery } from '@/lib/db/client';
+import { isAdminRequestAuthorized } from '@/lib/adminAuth';
 
 // DDL for waitlist_signups to ensure table existence in serverless environments
 const DDL_WAITLIST_SIGNUPS = `
@@ -71,6 +72,13 @@ export async function POST(request: Request) {
 }
 
 export async function GET(request: Request) {
+  if (!isAdminRequestAuthorized(request)) {
+    return NextResponse.json(
+      { error: 'Unauthorized', code: 'ADMIN_AUTH_REQUIRED' },
+      { status: 401, headers: { 'Cache-Control': 'no-store' } }
+    );
+  }
+
   try {
     const { searchParams } = new URL(request.url);
     const sn = searchParams.get('sn');
