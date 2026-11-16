@@ -459,6 +459,7 @@ export async function executePaidPackageGeneration(options: {
   fromDiagnosis?: boolean;
   diagnosticWeaknesses?: string[];
   optionalEmail?: string | null;
+  forceFail?: boolean;
 }): Promise<NextResponse> {
   const {
     routePath,
@@ -470,6 +471,7 @@ export async function executePaidPackageGeneration(options: {
     fromDiagnosis,
     diagnosticWeaknesses,
     optionalEmail,
+    forceFail = false,
   } = options;
 
   const cleanMemo = memo.trim();
@@ -513,6 +515,12 @@ export async function executePaidPackageGeneration(options: {
   };
 
   try {
+    if (forceFail) {
+      throw new Error(
+        "FORCED_TEST_FAILURE: Scenario 6 automated refund verification (admin double-locked)"
+      );
+    }
+
     // 1. Branch A 확인 (진단 교정 모드가 아닌 경우 1회성 previewToken 매핑 조회 및 소비)
     const consumedPreview = !fromDiagnosis
       ? await consumePreviewForOrder({ orderId, previewToken })

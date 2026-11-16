@@ -8,7 +8,7 @@ import {
 } from "@/lib/packageGenerator";
 import { reportServerError } from "@/lib/alerts";
 
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 /**
  * 부분 실패 복구 엔드포인트 (interviewPending: true 인 주문에 대해 추가 횟수 차감 없이 10개 면접 질문 재시도)

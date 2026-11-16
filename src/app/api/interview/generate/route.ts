@@ -30,7 +30,10 @@ import { getJobDetail } from "@/lib/db/jobs";
 import { BUSINESS_INFO } from "@/lib/siteConfig";
 import { reportServerError } from "@/lib/alerts";
 
-export const maxDuration = 60;
+import { recordFreeEndpointCall } from "@/lib/freeMetrics";
+import { isForceFailAuthorized } from "@/lib/testFlags";
+
+export const maxDuration = 120;
 
 export async function POST(req: Request) {
   let parsedOrderId: string | null = null;
@@ -152,6 +155,12 @@ export async function POST(req: Request) {
       };
 
       try {
+        if (isForceFailAuthorized(req, body?.forceFail)) {
+          throw new Error(
+            "FORCED_TEST_FAILURE: Scenario 6 automated refund verification (admin double-locked)"
+          );
+        }
+
         const genOutcome = await generateInterviewQuestionSet({
           genAI,
           jobCategory: rawJobCategory,
@@ -312,6 +321,8 @@ export async function POST(req: Request) {
         { status: 429 }
       );
     }
+
+    await recordFreeEndpointCall("interview_gen");
 
     const freeOutcome = await generateInterviewQuestionSet({
       genAI,

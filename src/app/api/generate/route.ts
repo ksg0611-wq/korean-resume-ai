@@ -13,7 +13,10 @@ import {
 } from "@/lib/packageGenerator";
 import { reportServerError } from "@/lib/alerts";
 
-export const maxDuration = 60;
+import { checkAndRecordFreeDraftCall } from "@/lib/freeMetrics";
+import { isForceFailAuthorized } from "@/lib/testFlags";
+
+export const maxDuration = 120;
 
 function getClientIp(req: Request): string {
   const forwarded = req.headers.get("x-forwarded-for");
@@ -75,6 +78,7 @@ export async function POST(req: Request) {
         fromDiagnosis,
         diagnosticWeaknesses,
         optionalEmail: email,
+        forceFail: isForceFailAuthorized(req, body?.forceFail),
       });
     }
 
@@ -104,12 +108,16 @@ export async function POST(req: Request) {
       );
     }
 
-    // 다중 문항(draft) 시간 예산: 1차 WRITING_MODEL(42,000ms) + 폴백 FALLBACK_MODEL(12,000ms) <= 총 54,000ms
-    // (Vercel Serverless maxDuration = 60,000ms 대비 입출력·Redis 저장 6,000ms 안전 여유 확보)
+    // 일일 300회 무료 draft 서킷 브레이커: 초과 시 ALERT_WEBHOOK_URL 알림 후 자정까지 gemini-3.8-flash로 자동 전환
+    const draftCircuit = await checkAndRecordFreeDraftCall();
+
+    // 다중 문항(draft) 시간 예산: 1차 모델(42,000ms) + 폴백 FALLBACK_MODEL(12,000ms) <= 총 54,000ms
+    // (Vercel Fluid Compute maxDuration = 120,000ms 대비 충분한 입출력·Redis 안전 마진 확보)
     const draftResult = await generateFourQuestionsResume({
       genAI,
       jobTitle,
       memo,
+      preferredModel: draftCircuit.preferredModel,
       perAttemptTimeoutMs: 42_000,
       fallbackAttemptTimeoutMs: 12_000,
       totalBudgetMs: 54_000,

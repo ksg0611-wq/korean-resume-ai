@@ -1,6 +1,8 @@
 import { handleConfirmPaymentRequest } from "@/lib/paymentHandlers";
 import { PRICING_PLANS } from "@/lib/policy";
 
+export const maxDuration = 120;
+
 export async function POST(req: Request) {
   return handleConfirmPaymentRequest(req, {
     serviceType: "interview",

@@ -88,6 +88,7 @@ export default function Home({ kakaoChannelUrl }: { kakaoChannelUrl?: string | n
   const [agreedToRefundPolicy, setAgreedToRefundPolicy] = useState(false);
   const [includeInterviewBundle, setIncludeInterviewBundle] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [generationElapsedSec, setGenerationElapsedSec] = useState(0);
   const [result, setResult] = useState("");
   const [error, setError] = useState("");
   const [refundNotice, setRefundNotice] = useState("");
@@ -115,6 +116,18 @@ export default function Home({ kakaoChannelUrl }: { kakaoChannelUrl?: string | n
 
   const selectedPrice = includeInterviewBundle ? BUNDLE_PRICE : PRICE;
   const selectedPriceDisplay = selectedPrice.toLocaleString("ko-KR");
+
+  useEffect(() => {
+    if (!isGenerating) {
+      setGenerationElapsedSec(0);
+      return;
+    }
+    setGenerationElapsedSec(0);
+    const timer = setInterval(() => {
+      setGenerationElapsedSec((prev) => prev + 1);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [isGenerating]);
 
   useEffect(() => {
     isWidgetReadyRef.current = isWidgetReady;
@@ -1099,9 +1112,45 @@ export default function Home({ kakaoChannelUrl }: { kakaoChannelUrl?: string | n
                 className="w-full py-3.5 px-5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-extrabold text-sm sm:text-base rounded-xl shadow-xs transition-colors cursor-pointer"
               >
                 {isGenerating
-                  ? "4문항 완성본 작성 중 (약 15~25초 소요)..."
+                  ? `4문항 완성본 작성 중 (${generationElapsedSec}초 경과 · 평균 약 33초)...`
                   : `4문항 작성 후 1번 문항 무료 미리보기 (일 ${FREE_LIMITS.resume}회) →`}
               </button>
+              {isGenerating && (
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                  <div className="flex flex-wrap items-center gap-1.5 font-semibold">
+                    {[
+                      "1단계: 문항 분석",
+                      "2단계: STAR 초안 작성",
+                      "3단계: 블라인드·수치 규칙 검수",
+                    ].map((stepLabel, idx) => {
+                      const activeIdx =
+                        generationElapsedSec < 7 ? 0 : generationElapsedSec < 22 ? 1 : 2;
+                      const isDone = idx < activeIdx;
+                      const isActive = idx === activeIdx;
+                      return (
+                        <span key={stepLabel} className="inline-flex items-center gap-1.5">
+                          {idx > 0 && <span className="text-blue-300">→</span>}
+                          <span
+                            className={`px-2 py-0.5 rounded-md border ${
+                              isDone
+                                ? "bg-emerald-50 border-emerald-200 text-emerald-700"
+                                : isActive
+                                  ? "bg-white border-blue-400 text-blue-900 font-bold"
+                                  : "bg-transparent border-transparent text-blue-400"
+                            }`}
+                          >
+                            {isDone ? "✓ " : isActive ? "● " : "○ "}
+                            {stepLabel}
+                          </span>
+                        </span>
+                      );
+                    })}
+                  </div>
+                  <span className="text-blue-700 font-bold shrink-0">
+                    {generationElapsedSec}초 경과
+                  </span>
+                </div>
+              )}
             </div>
           )}
         </section>
@@ -1301,7 +1350,16 @@ export default function Home({ kakaoChannelUrl }: { kakaoChannelUrl?: string | n
             generatingBannerText={
               isDiagnosing
                 ? "AI 심사위원이 5대 채점 기준에 따라 점수와 약점을 분석하고 있습니다 (약 10초 소요)"
-                : "표준 4문항 자소서와 맞춤형 면접 질문 10선을 생성하고 있습니다 (약 15~30초 소요)"
+                : "표준 4문항 자소서와 맞춤형 면접 질문 10선을 생성하고 있습니다 (평균 약 30~35초 소요)"
+            }
+            progressSteps={
+              isDiagnosing
+                ? undefined
+                : [
+                    "1단계: 문항 분석",
+                    "2단계: STAR 초안 작성",
+                    "3단계: 블라인드·수치 규칙 검수",
+                  ]
             }
             kakaoChannelUrl={kakaoChannelUrl}
             comparisonTable={<PackageComparisonTable />}

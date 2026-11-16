@@ -10,7 +10,7 @@ import { generateSelfIntroScript } from "@/lib/interviewGenerator";
 import { updateOrderInterviewNote } from "@/lib/orders";
 import { reportServerError } from "@/lib/alerts";
 
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 const MAX_SELF_INTRO_GENERATIONS_PER_SESSION = 5;
 

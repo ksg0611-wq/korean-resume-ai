@@ -7,6 +7,8 @@ import {
 import { normalizeEmail, PRICING_PLANS } from "@/lib/policy";
 import { reportServerError } from "@/lib/alerts";
 
+export const maxDuration = 120;
+
 type PreparablePlanType = keyof typeof PRICING_PLANS;
 
 /**
