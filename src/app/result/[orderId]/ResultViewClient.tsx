@@ -231,6 +231,32 @@ export default function ResultViewClient({
               </span>
             </div>
 
+            {interviewNote.selfIntroEntry && (
+              <div className="bg-emerald-50/70 border border-emerald-200 rounded-xl p-4 sm:p-5 space-y-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="px-2.5 py-0.5 rounded bg-emerald-600 text-white text-xs font-extrabold">
+                    1분 자기소개 대본
+                  </span>
+                  {typeof interviewNote.selfIntroEntry.totalScore === "number" && (
+                    <span className="text-xs font-extrabold text-emerald-800">
+                      {interviewNote.selfIntroEntry.totalScore}점 · {interviewNote.selfIntroEntry.consistencyLabel || "-"}
+                    </span>
+                  )}
+                </div>
+                {interviewNote.selfIntroEntry.userAnswer && (
+                  <p className="text-xs text-gray-800 leading-relaxed">
+                    <strong>내 대본:</strong> {interviewNote.selfIntroEntry.userAnswer}
+                  </p>
+                )}
+                {interviewNote.selfIntroEntry.modelAnswer && (
+                  <p className="bg-white p-3 rounded-lg border border-emerald-200 text-xs text-gray-800 leading-relaxed">
+                    <strong className="text-emerald-800">AI 추천·교정 대본:</strong>{" "}
+                    {interviewNote.selfIntroEntry.modelAnswer}
+                  </p>
+                )}
+              </div>
+            )}
+
             {interviewNote.entries.map((entry) => (
               <div
                 key={entry.questionId}

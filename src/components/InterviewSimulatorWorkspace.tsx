@@ -58,7 +58,7 @@ function EvaluationReportCard({
                 등급 {report.grade}
               </span>
               <span className="text-xs font-semibold text-gray-500">
-                {report.charCount}자 · 수치 {report.metricCount}건
+                {report.charCount}자 (약 {report.estimatedSpeechSeconds ?? Math.max(1, Math.round(report.charCount / 5.2))}초) · 수치 {report.metricCount}건
               </span>
             </div>
             <p className="text-[11px] text-gray-500 mt-1">
@@ -226,12 +226,16 @@ export default function InterviewSimulatorWorkspace({
   onSessionUpdate,
   onUnlockClick,
 }: InterviewSimulatorWorkspaceProps) {
+  const [simulatorTab, setSimulatorTab] = useState<"questions" | "self_intro">(
+    "questions"
+  );
   const [kindFilter, setKindFilter] = useState<"all" | "job" | "personality">("all");
   const [selectedQuestionId, setSelectedQuestionId] = useState<string>(
     session.questions[0]?.id || "q1"
   );
   const [draftAnswers, setDraftAnswers] = useState<Record<string, string>>({});
   const [submittingKey, setSubmittingKey] = useState<string | null>(null);
+  const [isGeneratingSelfIntro, setIsGeneratingSelfIntro] = useState(false);
   const [evalError, setEvalError] = useState("");
   const [lastDurationMs, setLastDurationMs] = useState<number | null>(null);
 
@@ -239,9 +243,12 @@ export default function InterviewSimulatorWorkspace({
     session.questions.find((q) => q.id === selectedQuestionId) ||
     session.questions[0];
 
-  const activeThread = selectedQuestion
-    ? session.threads[selectedQuestion.id]
-    : undefined;
+  const activeThread =
+    simulatorTab === "self_intro"
+      ? session.threads["self_intro"]
+      : selectedQuestion
+        ? session.threads[selectedQuestion.id]
+        : undefined;
 
   const filteredQuestions = session.questions.filter((q) =>
     kindFilter === "all" ? true : q.kind === kindFilter
@@ -260,6 +267,39 @@ export default function InterviewSimulatorWorkspace({
     if (evalError) setEvalError("");
   };
 
+  const handleGenerateSelfIntro = async () => {
+    if (session.isFree) {
+      onUnlockClick?.();
+      return;
+    }
+    setIsGeneratingSelfIntro(true);
+    setEvalError("");
+    try {
+      const res = await fetch("/api/interview/self-intro", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId: session.sessionId }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setEvalError(
+          data?.error || "1분 자기소개 대본 생성에 실패했습니다. 다시 시도해 주세요."
+        );
+        return;
+      }
+      if (typeof data.script === "string") {
+        setDraft("self_intro:0", data.script);
+      }
+      if (data.session) {
+        onSessionUpdate(data.session);
+      }
+    } catch {
+      setEvalError("네트워크 오류로 1분 자기소개 대본을 생성하지 못했습니다.");
+    } finally {
+      setIsGeneratingSelfIntro(false);
+    }
+  };
+
   const handleEvaluate = async (
     questionId: string,
     depth: 0 | 1 | 2 | 3,
@@ -267,9 +307,15 @@ export default function InterviewSimulatorWorkspace({
     fallbackText?: string | null
   ) => {
     const answerText = getDraft(draftKey, fallbackText).trim();
-    if (answerText.length < 100 || answerText.length > 800) {
+    const isSelfIntro = questionId === "self_intro" && depth === 0;
+    const minChars = isSelfIntro ? 80 : 100;
+    const maxChars = isSelfIntro ? 600 : 800;
+
+    if (answerText.length < minChars || answerText.length > maxChars) {
       setEvalError(
-        `면접 답변은 공백 포함 100자 이상 800자 이내로 입력해 주세요. (현재 ${answerText.length}자)`
+        isSelfIntro
+          ? `1분 자기소개 대본은 공백 포함 80자 이상 600자 이내로 입력해 주세요. (현재 ${answerText.length}자)`
+          : `면접 답변은 공백 포함 100자 이상 800자 이내로 입력해 주세요. (현재 ${answerText.length}자)`
       );
       return;
     }
@@ -384,6 +430,17 @@ export default function InterviewSimulatorWorkspace({
   const initKey = `${selectedQuestion.id}:0`;
   const initDraftVal = getDraft(initKey, activeThread?.initialAnswer);
   const initLen = initDraftVal.trim().length;
+
+  const selfIntroKey = "self_intro:0";
+  const selfIntroDraftVal = getDraft(
+    selfIntroKey,
+    session.threads["self_intro"]?.initialAnswer ?? session.selfIntroScript
+  );
+  const selfIntroLen = selfIntroDraftVal.trim().length;
+  const selfIntroEstSec =
+    selfIntroLen > 0 ? Math.max(1, Math.round(selfIntroLen / 5.2)) : 0;
+  const selfIntroThread = session.threads["self_intro"];
+
   const freeAlreadyUsed =
     session.isFree &&
     session.usedEvaluations >= 1 &&
@@ -414,6 +471,11 @@ export default function InterviewSimulatorWorkspace({
             <span className="text-xs text-slate-300">
               직무: {session.jobCategory}
             </span>
+            {session.jobContext && (
+              <span className="px-2 py-0.5 rounded bg-blue-900/70 border border-blue-700 text-[11px] font-semibold text-blue-100">
+                연동 공고: [{session.jobContext.instName}] {session.jobContext.title}
+              </span>
+            )}
           </div>
           <p className="text-xs sm:text-sm font-semibold text-slate-100">
             {session.isFree
@@ -439,7 +501,277 @@ export default function InterviewSimulatorWorkspace({
         </div>
       </div>
 
-      {/* 메인 2단 레이아웃: 좌측 문항 목록 / 우측 답변·채점·3단계 꼬리질문 */}
+      {/* 시뮬레이터 모드 전환 탭 (예상 질문 보드 vs 1분 자기소개 대본 모드) */}
+      <div className="flex flex-wrap gap-2 bg-white p-2 rounded-2xl border border-gray-200 shadow-xs">
+        <button
+          type="button"
+          onClick={() => {
+            setSimulatorTab("questions");
+            setEvalError("");
+          }}
+          className={`flex-1 min-w-[200px] py-2.5 px-4 rounded-xl text-xs sm:text-sm font-extrabold transition-all cursor-pointer ${
+            simulatorTab === "questions"
+              ? "bg-blue-600 text-white shadow-xs"
+              : "bg-gray-50 text-gray-700 hover:bg-gray-100"
+          }`}
+        >
+          📋 예상 질문 · 꼬리질문 ({session.questions.length}문항)
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setSimulatorTab("self_intro");
+            setEvalError("");
+          }}
+          className={`flex-1 min-w-[200px] py-2.5 px-4 rounded-xl text-xs sm:text-sm font-extrabold transition-all flex items-center justify-center gap-2 cursor-pointer ${
+            simulatorTab === "self_intro"
+              ? "bg-emerald-600 text-white shadow-xs"
+              : "bg-gray-50 text-gray-700 hover:bg-gray-100"
+          }`}
+        >
+          <span>🎤 1분 자기소개 대본 (생성·채점)</span>
+          {selfIntroThread?.initialEvaluation ? (
+            <span className="px-2 py-0.5 rounded-full bg-white/20 text-[11px]">
+              {selfIntroThread.initialEvaluation.totalScore}점
+            </span>
+          ) : session.selfIntroScript ? (
+            <span className="px-2 py-0.5 rounded-full bg-white/20 text-[11px]">
+              대본 생성됨
+            </span>
+          ) : null}
+        </button>
+      </div>
+
+      {simulatorTab === "self_intro" ? (
+        <div className="space-y-5">
+          <div className="bg-white border border-gray-200 rounded-2xl p-5 sm:p-6 space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-gray-100">
+              <div className="space-y-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="px-2.5 py-0.5 rounded-md bg-emerald-600 text-white text-xs font-extrabold">
+                    1분 자기소개 스튜디오
+                  </span>
+                  <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 text-xs font-bold">
+                    권장 250~330자 · 약 50~60초 발화
+                  </span>
+                </div>
+                <p className="text-xs text-gray-600">
+                  자소서 핵심 경험(및 선택 공고)을 1분 구술 대본으로 자동 생성하거나 직접 입력해 발화 시간·일관성·꼬리질문을 점검하세요.
+                </p>
+              </div>
+
+              {session.isFree ? (
+                <button
+                  type="button"
+                  onClick={() => onUnlockClick?.()}
+                  className="px-4 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold text-xs border border-gray-300 cursor-pointer shrink-0"
+                >
+                  🔒 AI 대본 자동 생성 (유료 전용)
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  disabled={isGeneratingSelfIntro}
+                  onClick={handleGenerateSelfIntro}
+                  className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white font-bold text-xs sm:text-sm cursor-pointer shrink-0 shadow-xs"
+                >
+                  {isGeneratingSelfIntro
+                    ? "1분 대본 생성 중 (3~5초)..."
+                    : session.selfIntroScript
+                      ? "AI 1분 자기소개 대본 다시 생성 ↻"
+                      : "AI 1분 자기소개 대본 자동 생성 ✨"}
+                </button>
+              )}
+            </div>
+
+            {session.selfIntroTips && session.selfIntroTips.length > 0 && (
+              <div className="p-3.5 rounded-xl bg-emerald-50/70 border border-emerald-200 text-xs text-emerald-950 space-y-1">
+                <p className="font-extrabold text-emerald-800">
+                  발표 호흡 · 강조 팁 ({session.selfIntroHook || "두괄식 1분 전달"})
+                </p>
+                <ul className="list-disc pl-4 space-y-0.5 text-emerald-900">
+                  {session.selfIntroTips.map((tip, i) => (
+                    <li key={i}>{tip}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <label
+                  htmlFor="self-intro-textarea"
+                  className="text-xs font-bold text-gray-800"
+                >
+                  내 1분 자기소개 대본 입력·수정 (80~600자)
+                </label>
+                <span
+                  className={`text-xs font-bold ${
+                    selfIntroLen >= 250 && selfIntroLen <= 330
+                      ? "text-emerald-700"
+                      : selfIntroLen >= 80
+                        ? "text-blue-700"
+                        : "text-gray-400"
+                  }`}
+                >
+                  {selfIntroLen} / 600자 · 예상 발화 약 {selfIntroEstSec}초{" "}
+                  {selfIntroLen >= 250 && selfIntroLen <= 330
+                    ? "(1분 적정 ✓)"
+                    : selfIntroLen > 330
+                      ? "(약간 김 · 압축 권장)"
+                      : selfIntroLen >= 80
+                        ? "(보통)"
+                        : ""}
+                </span>
+              </div>
+
+              {freeAlreadyUsed ? (
+                <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-xs space-y-2">
+                  <p className="font-bold text-amber-900">
+                    무료 체험 채점 횟수(1회)를 이미 사용하셨습니다.
+                  </p>
+                  {onUnlockClick && (
+                    <button
+                      type="button"
+                      onClick={onUnlockClick}
+                      className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs cursor-pointer"
+                    >
+                      유료 이용권에서 대본 생성·무제한 연습하기
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <>
+                  <textarea
+                    id="self-intro-textarea"
+                    rows={6}
+                    maxLength={600}
+                    value={selfIntroDraftVal}
+                    onChange={(e) => setDraft(selfIntroKey, e.target.value)}
+                    placeholder="예: 안녕하십니까. 데이터 기반 행정 실무 역량을 갖춘 지원자입니다... (250~330자 내외가 실제 면접 1분에 가장 알맞습니다)"
+                    className="w-full p-3.5 border border-gray-300 rounded-xl text-sm text-gray-800 leading-relaxed focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none resize-y"
+                  />
+
+                  {evalError && (
+                    <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700 font-medium">
+                      {evalError}
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    disabled={
+                      submittingKey !== null ||
+                      (!session.isFree && session.remainingEvaluations <= 0)
+                    }
+                    onClick={() =>
+                      handleEvaluate(
+                        "self_intro",
+                        0,
+                        selfIntroKey,
+                        session.threads["self_intro"]?.initialAnswer ??
+                          session.selfIntroScript
+                      )
+                    }
+                    className="w-full py-3 px-5 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-bold text-sm transition-colors cursor-pointer"
+                  >
+                    {submittingKey === selfIntroKey
+                      ? "1분 자기소개 대본 채점 및 꼬리질문 추출 중 (3~5초)..."
+                      : selfIntroThread?.initialEvaluation
+                        ? "대본 수정 후 다시 채점하기 (잔여 차감 1회)"
+                        : "1분 자기소개 대본 채점 + 예상 꼬리질문 받기"}
+                  </button>
+                </>
+              )}
+            </div>
+
+            {selfIntroThread?.initialEvaluation && (
+              <EvaluationReportCard
+                report={selfIntroThread.initialEvaluation}
+                onUnlockClick={onUnlockClick}
+              />
+            )}
+          </div>
+
+          {/* 1분 자기소개 기반 동적 꼬리질문 연쇄 (동일 1~3단계 컴포넌트 재사용) */}
+          {selfIntroThread?.followUps && selfIntroThread.followUps.length > 0 && (
+            <div className="space-y-4">
+              {selfIntroThread.followUps.map((f) => {
+                const fKey = `self_intro:${f.depth}`;
+                const fDraft = getDraft(fKey, f.userAnswer);
+                const fLen = fDraft.trim().length;
+                return (
+                  <div
+                    key={f.depth}
+                    className="bg-white border-2 border-indigo-200 rounded-2xl p-5 space-y-3 shadow-xs"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="px-2.5 py-0.5 rounded-md text-xs font-extrabold bg-indigo-100 text-indigo-800 border border-indigo-200">
+                          자기소개 기반 꼬리질문 {f.depth} / 3단계
+                        </span>
+                        <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 text-[11px] font-bold">
+                          NCS {f.ncsCompetency}
+                        </span>
+                      </div>
+                      <span className="text-[11px] text-gray-500">
+                        검증 초점: {f.focus}
+                      </span>
+                    </div>
+                    <p className="text-sm sm:text-base font-extrabold text-gray-900 leading-snug break-keep">
+                      &ldquo;{f.question}&rdquo;
+                    </p>
+                    {!session.isFree && (
+                      <div className="space-y-2 pt-2 border-t border-gray-100">
+                        <div className="flex items-center justify-between">
+                          <label
+                            htmlFor={`self-intro-fu-${fKey}`}
+                            className="text-xs font-bold text-gray-800"
+                          >
+                            {f.depth}단계 압박 꼬리질문 답변 (100~800자)
+                          </label>
+                          {renderCharCounter(fLen)}
+                        </div>
+                        <textarea
+                          id={`self-intro-fu-${fKey}`}
+                          rows={4}
+                          maxLength={800}
+                          value={fDraft}
+                          onChange={(e) => setDraft(fKey, e.target.value)}
+                          placeholder={`${f.depth}단계 꼬리질문에 100~800자로 방어 답변을 작성해 주세요.`}
+                          className="w-full p-3 border border-gray-300 rounded-xl text-sm text-gray-800 leading-relaxed focus:ring-2 focus:ring-indigo-500 outline-none resize-y"
+                        />
+                        <button
+                          type="button"
+                          disabled={
+                            submittingKey !== null ||
+                            session.remainingEvaluations <= 0
+                          }
+                          onClick={() =>
+                            handleEvaluate("self_intro", f.depth, fKey, f.userAnswer)
+                          }
+                          className="w-full py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-bold text-xs sm:text-sm cursor-pointer"
+                        >
+                          {submittingKey === fKey
+                            ? `${f.depth}단계 답변 채점 중...`
+                            : `${f.depth}단계 채점 완료`}
+                        </button>
+                        {f.evaluation && (
+                          <EvaluationReportCard
+                            report={f.evaluation}
+                            onUnlockClick={onUnlockClick}
+                          />
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      ) : (
+      /* 메인 2단 레이아웃: 좌측 문항 목록 / 우측 답변·채점·3단계 꼬리질문 */
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* 좌측 문항 보드 */}
         <aside className="lg:col-span-5 bg-white border border-gray-200 rounded-2xl p-4 space-y-3">
@@ -770,6 +1102,7 @@ export default function InterviewSimulatorWorkspace({
           )}
         </div>
       </div>
+      )}
     </div>
   );
 }

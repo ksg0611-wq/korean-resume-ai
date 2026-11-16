@@ -78,6 +78,14 @@ export default function JobDetailAction({
             )}
           </a>
 
+          {/* 이 공고 맞춤 모의면접 준비 CTA */}
+          <a
+            href={`/interview?sn=${encodeURIComponent(String(sn))}`}
+            className="py-3.5 px-5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-sm transition-colors text-center flex items-center justify-center gap-1.5"
+          >
+            <span>이 공고 면접 준비 →</span>
+          </a>
+
           {/* 원문 공고 보기 */}
           {srcUrl && (
             <a

@@ -249,7 +249,7 @@ try {
   const ctxBundleJson = await ctxBundleRes.json();
   assert.equal(ctxBundleJson.eligible, true);
   assert.equal(ctxBundleJson.linkedInterviewOrderId, "int_ord_bundle_1");
-  assert.equal(ctxBundleJson.jobCategory, "공공기관 디지털·IT");
+  assert.equal(ctxBundleJson.jobCategory, "공기업 기술·전산·데이터(NCS)");
   assert.ok(ctxBundleJson.resumeText.includes("공단 디지털 혁신"));
 
   // Bundle companion initial interview generation failure -> MUST mark interview_pending, NO Toss refund

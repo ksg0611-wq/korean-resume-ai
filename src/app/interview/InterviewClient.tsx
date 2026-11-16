@@ -24,7 +24,10 @@ import {
   normalizeEmail,
 } from "@/lib/policy";
 import { INTERVIEW_JOB_CATEGORIES } from "@/lib/interviewRubric";
-import type { InterviewSessionRecord } from "@/lib/interviewSession";
+import type {
+  InterviewJobContext,
+  InterviewSessionRecord,
+} from "@/lib/interviewSession";
 
 const INTERVIEW_SAMPLE_RESUME = `[지원동기 및 직무 경험]
 공공기관의 투명한 예산 집행과 안정적인 행정 서비스 운영에 기여하기 위해 지원했습니다. 저는 OO공단 경영지원 부서 행정 인턴으로 5개월간 근무하며 계약·지출 결의 증빙 검수와 부서 내 서류 반려 이력 관리 업무를 보조했습니다.
@@ -109,6 +112,7 @@ function InterviewContent({
   } | null>(null);
   const [contextNotice, setContextNotice] = useState("");
   const [contextError, setContextError] = useState("");
+  const [jobContext, setJobContext] = useState<InterviewJobContext | null>(null);
 
   const [paymentState, setPaymentState] = useState<
     "idle" | "processing" | "timeout" | "error"
@@ -246,6 +250,7 @@ function InterviewContent({
     const resumeSessionId = urlParams.get("sessionId");
     const upgradeFrom = urlParams.get("upgradeFrom");
     const bundleFrom = urlParams.get("bundleFrom");
+    const jobSnParam = urlParams.get("sn");
 
     const fetchDraft = async (t: string) => {
       try {
@@ -272,6 +277,28 @@ function InterviewContent({
     };
 
     const bootstrap = async () => {
+      // 0) 채용공고 상세에서 연동 진입 (/interview?sn=...)
+      if (jobSnParam) {
+        try {
+          const jobRes = await fetch(
+            `/api/interview/context?sn=${encodeURIComponent(jobSnParam)}`,
+            { cache: "no-store" }
+          );
+          const jobData = await jobRes.json().catch(() => null);
+          if (jobRes.ok && jobData?.jobContext) {
+            setJobContext(jobData.jobContext as InterviewJobContext);
+            if (
+              jobData.jobCategory &&
+              INTERVIEW_JOB_CATEGORIES.some((c) => c.value === jobData.jobCategory)
+            ) {
+              setJobCategory(jobData.jobCategory);
+              localStorage.setItem("interviewJobCategory", jobData.jobCategory);
+            }
+          }
+        } catch {
+          // ignore job context load error cleanly
+        }
+      }
       // 0a) 자소서 구매자 +3,000원 업그레이드 진입 (/interview?upgradeFrom=...&token=...)
       if (upgradeFrom) {
         try {
@@ -630,6 +657,7 @@ function InterviewContent({
         jobCategory: categoryToUse || DEFAULT_INTERVIEW_JOB_CATEGORY,
         resumeText: textToUse,
         isFree: !paidOrderId,
+        ...(jobContext?.sn ? { jobSn: jobContext.sn } : {}),
       };
 
       if (paidOrderId) {
@@ -703,6 +731,7 @@ function InterviewContent({
         orderId: data.order?.orderId ?? null,
         isFree: Boolean(data.isFree),
         jobCategory: data.jobCategory || categoryToUse,
+        ...(jobContext ? { jobContext } : {}),
         resumeText: textToUse,
         questions: data.questions || [],
         threads: {},
@@ -851,6 +880,27 @@ function InterviewContent({
             </div>
 
             <div className="bg-white p-5 sm:p-6 rounded-2xl shadow-sm border border-gray-200 flex flex-col gap-3">
+              {jobContext && (
+                <div className="p-3.5 rounded-xl bg-blue-50 border border-blue-200 text-xs text-blue-950 space-y-1">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="font-extrabold text-blue-800">
+                      🎯 공고 맞춤 면접 연동: [{jobContext.instName}] {jobContext.title}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setJobContext(null)}
+                      className="text-[11px] text-blue-700 underline hover:text-blue-900 cursor-pointer"
+                    >
+                      연동 해제
+                    </button>
+                  </div>
+                  {jobContext.ncsNames.length > 0 && (
+                    <p className="text-[11px] text-blue-800">
+                      NCS 분야: <strong>{jobContext.ncsNames.join(", ")}</strong> · 기관·직무 특성을 면접 질문과 채점에 자동 반영합니다.
+                    </p>
+                  )}
+                </div>
+              )}
               {contextNotice && (
                 <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-900 font-semibold leading-relaxed">
                   {contextNotice}
