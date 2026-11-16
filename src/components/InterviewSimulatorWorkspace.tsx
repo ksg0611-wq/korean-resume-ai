@@ -8,6 +8,7 @@ interface InterviewSimulatorWorkspaceProps {
   session: InterviewSessionRecord;
   onSessionUpdate: (updatedSession: InterviewSessionRecord) => void;
   onUnlockClick?: () => void;
+  paymentLocked?: boolean;
 }
 
 function EvaluationReportCard({
@@ -225,6 +226,7 @@ export default function InterviewSimulatorWorkspace({
   session,
   onSessionUpdate,
   onUnlockClick,
+  paymentLocked = false,
 }: InterviewSimulatorWorkspaceProps) {
   const [simulatorTab, setSimulatorTab] = useState<"questions" | "self_intro">(
     "questions"
@@ -561,13 +563,19 @@ export default function InterviewSimulatorWorkspace({
               </div>
 
               {session.isFree ? (
-                <button
-                  type="button"
-                  onClick={() => onUnlockClick?.()}
-                  className="px-4 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold text-xs border border-gray-300 cursor-pointer shrink-0"
-                >
-                  🔒 AI 대본 자동 생성 (유료 전용)
-                </button>
+                paymentLocked ? (
+                  <span className="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 font-bold text-xs border border-slate-200 shrink-0">
+                    결제 서비스 준비 중입니다
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => onUnlockClick?.()}
+                    className="px-4 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold text-xs border border-gray-300 cursor-pointer shrink-0"
+                  >
+                    🔒 AI 대본 자동 생성 (유료 전용)
+                  </button>
+                )
               ) : (
                 <button
                   type="button"
@@ -865,14 +873,20 @@ export default function InterviewSimulatorWorkspace({
                 <p className="text-[11px] text-gray-500">
                   유료 이용권(4,900원) 결제 시 15문항 전체와 최대 45회 답변 채점, 1~3단계 꼬리질문 연쇄, 7일 면접 대비 노트가 열립니다.
                 </p>
-                {onUnlockClick && (
-                  <button
-                    type="button"
-                    onClick={onUnlockClick}
-                    className="w-full py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs cursor-pointer"
-                  >
-                    4,900원으로 15문항 전체 열기 →
-                  </button>
+                {paymentLocked ? (
+                  <div className="w-full py-2 rounded-lg bg-slate-100 border border-slate-200 text-slate-700 font-bold text-xs text-center">
+                    결제 서비스 준비 중입니다
+                  </div>
+                ) : (
+                  onUnlockClick && (
+                    <button
+                      type="button"
+                      onClick={onUnlockClick}
+                      className="w-full py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs cursor-pointer"
+                    >
+                      4,900원으로 15문항 전체 열기 →
+                    </button>
+                  )
                 )}
               </div>
             )}
@@ -927,14 +941,20 @@ export default function InterviewSimulatorWorkspace({
                   <p className="text-amber-800">
                     나머지 질문 채점과 모범 답변 확인, 1~3단계 꼬리질문 연습은 4,900원 이용권에서 이용할 수 있습니다.
                   </p>
-                  {onUnlockClick && (
-                    <button
-                      type="button"
-                      onClick={onUnlockClick}
-                      className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs cursor-pointer"
-                    >
-                      4,900원 이용권으로 계속 연습하기
-                    </button>
+                  {paymentLocked ? (
+                    <span className="inline-block px-4 py-2 rounded-lg bg-white border border-slate-200 text-slate-700 font-bold text-xs">
+                      결제 서비스 준비 중입니다
+                    </span>
+                  ) : (
+                    onUnlockClick && (
+                      <button
+                        type="button"
+                        onClick={onUnlockClick}
+                        className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs cursor-pointer"
+                      >
+                        4,900원 이용권으로 계속 연습하기
+                      </button>
+                    )
                   )}
                 </div>
               ) : (

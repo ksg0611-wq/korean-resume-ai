@@ -496,7 +496,10 @@ try {
   const payOkRes = await confirmPaymentRoute.POST(
     new Request("http://localhost:3000/api/payments/success", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "x-admin-secret": "super_secret_admin_stage1",
+      },
       body: JSON.stringify({
         orderId: orderOkId,
         paymentKey: "pk_safe_1",
@@ -531,7 +534,10 @@ try {
   const payForceRes = await confirmPaymentRoute.POST(
     new Request("http://localhost:3000/api/payments/success", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "x-admin-secret": "super_secret_admin_stage1",
+      },
       body: JSON.stringify({
         orderId: orderForceId,
         paymentKey: "pk_force_resume_1",
@@ -575,7 +581,10 @@ try {
   const payIvRes = await confirmInterviewRoute.POST(
     new Request("http://localhost:3000/api/interview/payment", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "x-admin-secret": "super_secret_admin_stage1",
+      },
       body: JSON.stringify({
         orderId: orderIvId,
         paymentKey: "pk_force_iv_1",

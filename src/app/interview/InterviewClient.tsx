@@ -81,8 +81,10 @@ function buildClientNoteSummaryText(session: InterviewSessionRecord): string {
 
 function InterviewContent({
   kakaoChannelUrl,
+  paymentLocked = false,
 }: {
   kakaoChannelUrl?: string | null;
+  paymentLocked?: boolean;
 }) {
   const [resumeText, setResumeText] = useState("");
   const [jobCategory, setJobCategory] = useState(
@@ -461,7 +463,9 @@ function InterviewContent({
     };
 
     bootstrap();
-    initPaymentWidget();
+    if (!paymentLocked) {
+      initPaymentWidget();
+    }
 
     return () => {
       if (timeoutTimerRef.current) {
@@ -562,6 +566,10 @@ function InterviewContent({
   };
 
   const handlePaymentClick = async () => {
+    if (paymentLocked) {
+      setError("결제 서비스 준비 중입니다.");
+      return;
+    }
     setError("");
     setRefundNotice("");
     setRefundPendingNotice("");
@@ -1026,6 +1034,7 @@ function InterviewContent({
                 generatingBannerText="공공기관 면접관 관점에서 자소서 기반 직무·인성 질문 세트를 생성하고 있습니다 (약 10~20초)"
                 widgetContainerId="interview-payment-widget"
                 agreementContainerId="interview-agreement"
+                paymentLocked={paymentLocked}
                 kakaoChannelUrl={kakaoChannelUrl}
                 comparisonTable={interviewComparisonBox}
               />
@@ -1080,7 +1089,8 @@ function InterviewContent({
             <InterviewSimulatorWorkspace
               session={session}
               onSessionUpdate={handleSessionUpdate}
-              onUnlockClick={session.isFree ? scrollToPayment : undefined}
+              onUnlockClick={session.isFree && !paymentLocked ? scrollToPayment : undefined}
+              paymentLocked={paymentLocked}
             />
           </section>
         )}
@@ -1093,8 +1103,10 @@ function InterviewContent({
 
 export default function InterviewPage({
   kakaoChannelUrl,
+  paymentLocked = false,
 }: {
   kakaoChannelUrl?: string | null;
+  paymentLocked?: boolean;
 }) {
   return (
     <Suspense
@@ -1104,7 +1116,10 @@ export default function InterviewPage({
         </div>
       }
     >
-      <InterviewContent kakaoChannelUrl={kakaoChannelUrl} />
+      <InterviewContent
+        kakaoChannelUrl={kakaoChannelUrl}
+        paymentLocked={paymentLocked}
+      />
     </Suspense>
   );
 }

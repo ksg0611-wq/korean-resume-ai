@@ -34,6 +34,7 @@ interface ResultViewClientProps {
   remainingGenerations: number;
   resultUrl: string;
   kakaoChannelUrl: string | null;
+  paymentLocked?: boolean;
 }
 
 export default function ResultViewClient({
@@ -58,6 +59,7 @@ export default function ResultViewClient({
   remainingGenerations,
   resultUrl,
   kakaoChannelUrl,
+  paymentLocked = false,
 }: ResultViewClientProps) {
   const router = useRouter();
   const [text, setText] = useState(initialText);
@@ -360,12 +362,18 @@ export default function ResultViewClient({
             !linkedInterviewOrderId &&
             !upgradedToInterviewOrderId &&
             planType !== "bundle" && (
-              <Link
-                href={`/interview?upgradeFrom=${encodeURIComponent(orderId)}&token=${encodeURIComponent(resultToken)}`}
-                className="flex-1 min-w-[220px] py-3.5 px-5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl transition-colors text-center"
-              >
-                내 자소서로 실전 모의면접 업그레이드 (+3,000원) →
-              </Link>
+              paymentLocked ? (
+                <div className="flex-1 min-w-[220px] py-3.5 px-5 bg-slate-100 text-slate-700 border border-slate-200 font-bold text-sm rounded-xl text-center">
+                  결제 서비스 준비 중입니다
+                </div>
+              ) : (
+                <Link
+                  href={`/interview?upgradeFrom=${encodeURIComponent(orderId)}&token=${encodeURIComponent(resultToken)}`}
+                  className="flex-1 min-w-[220px] py-3.5 px-5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl transition-colors text-center"
+                >
+                  내 자소서로 실전 모의면접 업그레이드 (+3,000원) →
+                </Link>
+              )
             )}
           {serviceType === "resume" && !linkedInterviewOrderId && !upgradedToInterviewOrderId && (
             <button

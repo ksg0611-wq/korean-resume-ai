@@ -6,6 +6,7 @@ import {
 } from "@/lib/orders";
 import { normalizeEmail, PRICING_PLANS } from "@/lib/policy";
 import { reportServerError } from "@/lib/alerts";
+import { isPaymentLockedForRequest } from "@/lib/adminAuth";
 
 export const maxDuration = 120;
 
@@ -13,10 +14,21 @@ type PreparablePlanType = keyof typeof PRICING_PLANS;
 
 /**
  * 결제 창 호출 직전:
- * 1) orderId <-> previewToken 매핑 저장 및 preview TTL(7,200초) 연장
- * 2) planType / expectedAmount / baseOrderId 의도(payment_intent) 등록 및 +3,000원 업그레이드 사전 자격 검증
+ * 1) 테스트 키(`test_`) 사용 중 비관리자 요청 403 차단
+ * 2) orderId <-> previewToken 매핑 저장 및 preview TTL(7,200초) 연장
+ * 3) planType / expectedAmount / baseOrderId 의도(payment_intent) 등록 및 +3,000원 업그레이드 사전 자격 검증
  */
 export async function POST(req: Request) {
+  if (isPaymentLockedForRequest(req)) {
+    return NextResponse.json(
+      {
+        error: "결제 서비스 준비 중입니다.",
+        code: "TEST_PAYMENT_LOCKED",
+      },
+      { status: 403, headers: { "Cache-Control": "no-store" } }
+    );
+  }
+
   let orderIdForLog: string | null = null;
   try {
     const body = await req.json();

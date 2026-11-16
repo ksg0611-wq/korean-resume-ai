@@ -23,6 +23,7 @@ import {
 import { normalizeEmail, PRICING_PLANS } from "@/lib/policy";
 import type { InterviewQuestionItem, PlanType, ServiceType } from "@/lib/results";
 import { BUSINESS_INFO } from "@/lib/siteConfig";
+import { isPaymentLockedForRequest } from "@/lib/adminAuth";
 
 /**
  * 토스 결제 승인 공통 라우트 핸들러 (/api/payments/success, /api/interview/payment 공용)
@@ -35,6 +36,17 @@ export async function handleConfirmPaymentRequest(
     allowedAmounts?: number[];
   }
 ): Promise<NextResponse> {
+  if (isPaymentLockedForRequest(req)) {
+    return NextResponse.json(
+      {
+        error: "결제 서비스 준비 중입니다.",
+        message: "결제 서비스 준비 중입니다.",
+        code: "TEST_PAYMENT_LOCKED",
+      },
+      { status: 403, headers: { "Cache-Control": "no-store" } }
+    );
+  }
+
   const { serviceType, routePath, allowedAmounts } = options;
   let orderIdForLog: string | null = null;
 

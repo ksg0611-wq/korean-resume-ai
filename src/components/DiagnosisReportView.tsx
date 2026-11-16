@@ -3,7 +3,8 @@ import { PAID_GENERATIONS_BREAKDOWN } from "@/lib/policy";
 
 interface DiagnosisReportViewProps {
   report: FreeDiagnosticResponse;
-  onUpgradeClick: () => void;
+  onUpgradeClick?: () => void;
+  paymentLocked?: boolean;
 }
 
 function getGradeBadgeStyle(grade: string): string {
@@ -22,6 +23,7 @@ function getGradeBadgeStyle(grade: string): string {
 export default function DiagnosisReportView({
   report,
   onUpgradeClick,
+  paymentLocked = false,
 }: DiagnosisReportViewProps) {
   return (
     <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 sm:p-8 space-y-6">
@@ -238,13 +240,19 @@ export default function DiagnosisReportView({
             원문 사실관계는 그대로 유지하고 블라인드·STAR·구체성을 한 번에 교정해 드립니다 ({PAID_GENERATIONS_BREAKDOWN}).
           </p>
         </div>
-        <button
-          type="button"
-          onClick={onUpgradeClick}
-          className="px-5 py-3 bg-white text-blue-700 hover:bg-blue-50 font-extrabold text-sm rounded-xl shadow-sm transition-colors cursor-pointer shrink-0"
-        >
-          약점을 고친 완성본 받기 — 4,900원 →
-        </button>
+        {paymentLocked || !onUpgradeClick ? (
+          <div className="px-5 py-3 bg-white/95 text-slate-800 font-extrabold text-sm rounded-xl shadow-sm shrink-0">
+            결제 서비스 준비 중입니다
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={onUpgradeClick}
+            className="px-5 py-3 bg-white text-blue-700 hover:bg-blue-50 font-extrabold text-sm rounded-xl shadow-sm transition-colors cursor-pointer shrink-0"
+          >
+            약점을 고친 완성본 받기 — 4,900원 →
+          </button>
+        )}
       </div>
     </div>
   );

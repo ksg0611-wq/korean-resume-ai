@@ -3,6 +3,7 @@ import Link from "next/link";
 import { verifyAndGetStoredResult, buildResultUrl } from "@/lib/results";
 import { getInterviewSession } from "@/lib/interviewSession";
 import { BUSINESS_INFO } from "@/lib/siteConfig";
+import { getServerPaymentLockState } from "@/lib/paymentAccess";
 import ResultViewClient from "./ResultViewClient";
 
 export const dynamic = "force-dynamic";
@@ -21,6 +22,7 @@ export default async function ResultPage({
 }) {
   const orderId = decodeURIComponent(params.orderId || "");
   const token = typeof searchParams?.token === "string" ? searchParams.token : null;
+  const { paymentLocked } = getServerPaymentLockState();
 
   const outcome = await verifyAndGetStoredResult(orderId, token);
 
@@ -39,17 +41,25 @@ export default async function ResultPage({
               : "토큰이 일치하지 않거나 접근 권한이 없습니다."}
           </p>
           {outcome.status === 410 && outcome.serviceType === "resume" && token && (
-            <div className="pt-2 space-y-2">
-              <p className="text-xs text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-xl p-3">
-                자소서 본문은 파기되었지만, 기존 결제 주문의 <strong>+3,000원 면접 시뮬레이터 업그레이드 할인</strong>은 계속 이용하실 수 있습니다.
-              </p>
-              <Link
-                href={`/interview?upgradeFrom=${encodeURIComponent(orderId)}&token=${encodeURIComponent(token)}`}
-                className="inline-block w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl transition-colors"
-              >
-                +3,000원 면접 업그레이드 이동 (원문 재입력 안내) →
-              </Link>
-            </div>
+            paymentLocked ? (
+              <div className="pt-2">
+                <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-xs font-bold text-slate-700">
+                  결제 서비스 준비 중입니다
+                </div>
+              </div>
+            ) : (
+              <div className="pt-2 space-y-2">
+                <p className="text-xs text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-xl p-3">
+                  자소서 본문은 파기되었지만, 기존 결제 주문의 <strong>+3,000원 면접 시뮬레이터 업그레이드 할인</strong>은 계속 이용하실 수 있습니다.
+                </p>
+                <Link
+                  href={`/interview?upgradeFrom=${encodeURIComponent(orderId)}&token=${encodeURIComponent(token)}`}
+                  className="inline-block w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl transition-colors"
+                >
+                  +3,000원 면접 업그레이드 이동 (원문 재입력 안내) →
+                </Link>
+              </div>
+            )
           )}
         </div>
       </main>
@@ -97,6 +107,7 @@ export default async function ResultPage({
       remainingGenerations={order.remainingGenerations}
       resultUrl={buildResultUrl(result.orderId, result.token)}
       kakaoChannelUrl={BUSINESS_INFO.kakaoChannelUrl}
+      paymentLocked={paymentLocked}
     />
   );
 }

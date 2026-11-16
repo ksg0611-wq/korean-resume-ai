@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import InterviewClient from "./InterviewClient";
 import { BUSINESS_INFO } from "@/lib/siteConfig";
+import { getServerPaymentLockState } from "@/lib/paymentAccess";
+
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "공공기관 AI 면접 시뮬레이터 (NCS 15문항 · 3단계 꼬리질문) | Korea Resume AI",
@@ -12,5 +15,11 @@ export const metadata: Metadata = {
 };
 
 export default function InterviewPage() {
-  return <InterviewClient kakaoChannelUrl={BUSINESS_INFO.kakaoChannelUrl} />;
+  const { paymentLocked } = getServerPaymentLockState();
+  return (
+    <InterviewClient
+      kakaoChannelUrl={BUSINESS_INFO.kakaoChannelUrl}
+      paymentLocked={paymentLocked}
+    />
+  );
 }

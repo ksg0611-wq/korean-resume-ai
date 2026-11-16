@@ -57,7 +57,13 @@ interface PaidResultInfo {
   emailSent: boolean;
 }
 
-export default function Home({ kakaoChannelUrl }: { kakaoChannelUrl?: string | null }) {
+export default function Home({
+  kakaoChannelUrl,
+  paymentLocked = false,
+}: {
+  kakaoChannelUrl?: string | null;
+  paymentLocked?: boolean;
+}) {
   const [inputMode, setInputMode] = useState<"diagnose" | "draft">("diagnose");
 
   // 진단받기 모드 상태 (원문은 브라우저 localStorage에만 임시 보관)
@@ -286,7 +292,9 @@ export default function Home({ kakaoChannelUrl }: { kakaoChannelUrl?: string | n
       }
     }
 
-    initPaymentWidget();
+    if (!paymentLocked) {
+      initPaymentWidget();
+    }
 
     return () => {
       if (timeoutTimerRef.current) {
@@ -720,6 +728,10 @@ export default function Home({ kakaoChannelUrl }: { kakaoChannelUrl?: string | n
 
   // 결제 버튼 클릭 핸들러 (10초 타임아웃 및 무한 스피너 방지)
   const handlePaymentClick = async () => {
+    if (paymentLocked) {
+      setError("결제 서비스 준비 중입니다.");
+      return;
+    }
     setError("");
     setRefundNotice("");
     setRefundPendingNotice("");
@@ -787,7 +799,9 @@ export default function Home({ kakaoChannelUrl }: { kakaoChannelUrl?: string | n
     setPaymentState("idle");
     setPaymentTimeoutMsg("");
     setError("");
-    initPaymentWidget();
+    if (!paymentLocked) {
+      initPaymentWidget();
+    }
   };
 
   const handleInterviewRedirect = async () => {
@@ -1160,7 +1174,8 @@ export default function Home({ kakaoChannelUrl }: { kakaoChannelUrl?: string | n
           <section id="diagnosis-result-section" className="scroll-mt-20">
             <DiagnosisReportView
               report={diagnosisReport}
-              onUpgradeClick={scrollToPayment}
+              onUpgradeClick={paymentLocked ? undefined : scrollToPayment}
+              paymentLocked={paymentLocked}
             />
           </section>
         )}
@@ -1213,7 +1228,8 @@ export default function Home({ kakaoChannelUrl }: { kakaoChannelUrl?: string | n
                 interviewPending={interviewPending}
                 isRetryingInterview={isRetryingInterview}
                 onRetryInterview={handleRetryInterviewOnly}
-                onUnlockClick={lockedItems.length > 0 ? scrollToPayment : undefined}
+                onUnlockClick={lockedItems.length > 0 && !paymentLocked ? scrollToPayment : undefined}
+                paymentLocked={paymentLocked}
                 previewExpiresAt={previewExpiresAt}
               />
             ) : (
@@ -1233,7 +1249,7 @@ export default function Home({ kakaoChannelUrl }: { kakaoChannelUrl?: string | n
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M14 5l7 7m0 0l-7 7m7-7H3" />
                   </svg>
                 </Link>
-              ) : paidResultInfo?.orderId && paidResultInfo?.resultToken ? (
+              ) : !paymentLocked && paidResultInfo?.orderId && paidResultInfo?.resultToken ? (
                 <Link
                   href={`/interview?upgradeFrom=${encodeURIComponent(paidResultInfo.orderId)}&token=${encodeURIComponent(paidResultInfo.resultToken)}`}
                   className="w-full py-4 px-6 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-base rounded-xl shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2"
@@ -1362,6 +1378,7 @@ export default function Home({ kakaoChannelUrl }: { kakaoChannelUrl?: string | n
                   ]
             }
             kakaoChannelUrl={kakaoChannelUrl}
+            paymentLocked={paymentLocked}
             comparisonTable={<PackageComparisonTable />}
           />
         </div>

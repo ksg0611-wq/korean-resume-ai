@@ -41,6 +41,7 @@ export interface PaymentSectionProps {
   progressSteps?: readonly string[];
   widgetContainerId?: string;
   agreementContainerId?: string;
+  paymentLocked?: boolean;
   kakaoChannelUrl?: string | null;
   comparisonTable?: React.ReactNode;
   bundleAddOn?: {
@@ -84,6 +85,7 @@ export default function PaymentSection({
   progressSteps,
   widgetContainerId = "payment-widget",
   agreementContainerId = "agreement",
+  paymentLocked = false,
   kakaoChannelUrl,
   comparisonTable,
   bundleAddOn,
@@ -188,7 +190,7 @@ export default function PaymentSection({
       )}
 
       {/* 선택 추가 옵션 (예: 면접 연습 +3,000원 통합 패키지) */}
-      {bundleAddOn && (
+      {!paymentLocked && bundleAddOn && (
         <label
           className={`flex items-start gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${
             bundleAddOn.checked
@@ -221,54 +223,60 @@ export default function PaymentSection({
       )}
 
       {/* 결과 재열람 링크 및 영수증 안내 이메일 입력란 */}
-      <div className="flex flex-col gap-1.5">
-        <label htmlFor={emailInputId} className="text-xs sm:text-sm font-bold text-gray-800">
-          결과 재열람 링크 · 영수증 안내 이메일{" "}
-          <span className="text-blue-600 font-semibold">(유료 결제 시 필수)</span>
-        </label>
-        <input
-          id={emailInputId}
-          type="email"
-          value={customerEmail}
-          onChange={(e) => onCustomerEmailChange(e.target.value)}
-          placeholder="example@email.com"
-          autoComplete="email"
-          className="w-full px-3.5 py-2.5 border border-gray-300 rounded-xl text-sm text-gray-900 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-        />
-        <p className="text-[11px] text-gray-500 leading-relaxed break-keep">
-          결제 후 생성이 완료되면 7일간 보관되는 재열람 링크와 토스 영수증 안내를 메일로도 발송해 드립니다. (무료 체험 시에는 입력하지 않아도 됩니다.)
-        </p>
-      </div>
+      {!paymentLocked && (
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor={emailInputId} className="text-xs sm:text-sm font-bold text-gray-800">
+            결과 재열람 링크 · 영수증 안내 이메일{" "}
+            <span className="text-blue-600 font-semibold">(유료 결제 시 필수)</span>
+          </label>
+          <input
+            id={emailInputId}
+            type="email"
+            value={customerEmail}
+            onChange={(e) => onCustomerEmailChange(e.target.value)}
+            placeholder="example@email.com"
+            autoComplete="email"
+            className="w-full px-3.5 py-2.5 border border-gray-300 rounded-xl text-sm text-gray-900 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+          />
+          <p className="text-[11px] text-gray-500 leading-relaxed break-keep">
+            결제 후 생성이 완료되면 7일간 보관되는 재열람 링크와 토스 영수증 안내를 메일로도 발송해 드립니다. (무료 체험 시에는 입력하지 않아도 됩니다.)
+          </p>
+        </div>
+      )}
 
       {/* Toss Payments 위젯 컨테이너 */}
-      <div id={widgetContainerId} className="w-full"></div>
-      <div id={agreementContainerId} className="w-full"></div>
+      {!paymentLocked && (
+        <>
+          <div id={widgetContainerId} className="w-full"></div>
+          <div id={agreementContainerId} className="w-full"></div>
 
-      {/* 환불 정책 동의 체크박스 */}
-      <label
-        htmlFor={refundCheckboxId}
-        className="flex items-start gap-3 cursor-pointer p-4 bg-gray-50 border border-gray-200 rounded-xl hover:bg-gray-100/70 transition-colors"
-      >
-        <input
-          id={refundCheckboxId}
-          type="checkbox"
-          className="mt-0.5 w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500 flex-shrink-0 cursor-pointer"
-          checked={agreedToRefundPolicy}
-          onChange={(e) => onAgreedChange(e.target.checked)}
-        />
-        <span className="text-xs sm:text-sm text-gray-700 leading-relaxed break-keep">
-          <strong>[필수]</strong> 결제 완료 시 즉시 AI 생성이 시작되는 디지털 콘텐츠 특성상, 생성 시작 후 단순 변심에 의한 환불이 불가함에 동의합니다. ({REFUND_SUMMARY_TEXT}){" "}
-          <a
-            href="/refund"
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={(e) => e.stopPropagation()}
-            className="text-blue-600 underline font-semibold whitespace-nowrap"
+          {/* 환불 정책 동의 체크박스 */}
+          <label
+            htmlFor={refundCheckboxId}
+            className="flex items-start gap-3 cursor-pointer p-4 bg-gray-50 border border-gray-200 rounded-xl hover:bg-gray-100/70 transition-colors"
           >
-            환불정책 보기
-          </a>
-        </span>
-      </label>
+            <input
+              id={refundCheckboxId}
+              type="checkbox"
+              className="mt-0.5 w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500 flex-shrink-0 cursor-pointer"
+              checked={agreedToRefundPolicy}
+              onChange={(e) => onAgreedChange(e.target.checked)}
+            />
+            <span className="text-xs sm:text-sm text-gray-700 leading-relaxed break-keep">
+              <strong>[필수]</strong> 결제 완료 시 즉시 AI 생성이 시작되는 디지털 콘텐츠 특성상, 생성 시작 후 단순 변심에 의한 환불이 불가함에 동의합니다. ({REFUND_SUMMARY_TEXT}){" "}
+              <a
+                href="/refund"
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="text-blue-600 underline font-semibold whitespace-nowrap"
+              >
+                환불정책 보기
+              </a>
+            </span>
+          </label>
+        </>
+      )}
 
       {/* 안전 결제 보장 바 */}
       <div className="flex flex-col sm:flex-row justify-center gap-3 sm:gap-6 text-xs sm:text-sm font-semibold text-emerald-700 bg-emerald-50 py-3 px-4 rounded-xl border border-emerald-100 text-center">
@@ -375,32 +383,46 @@ export default function PaymentSection({
         </a>
       </p>
 
-      {/* 결제 버튼 */}
-      <button
-        type="button"
-        onClick={onPaymentClick}
-        disabled={paymentState === "processing" || isGenerating}
-        className="w-full py-4 px-6 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 disabled:bg-blue-500 text-white font-bold text-base sm:text-lg rounded-xl shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2.5 cursor-pointer disabled:cursor-wait"
-      >
-        {paymentState === "processing" ? (
-          <>
-            <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-            <span>{processingText}</span>
-          </>
-        ) : (
-          <>
-            <span>{displayPaidText}</span>
-            {paidButtonSubText && (
-              <span className="text-xs bg-blue-500/80 px-2 py-0.5 rounded font-normal">
-                {paidButtonSubText}
-              </span>
-            )}
-          </>
-        )}
-      </button>
+      {/* 결제 버튼 (테스트 키 잠금 시 비관리자에게는 안내 문구로 대체) */}
+      {paymentLocked ? (
+        <div
+          role="status"
+          className="w-full py-4 px-5 bg-slate-100 border border-slate-200 text-slate-800 rounded-xl text-center space-y-1"
+        >
+          <p className="font-extrabold text-sm sm:text-base">
+            결제 서비스 준비 중입니다
+          </p>
+          <p className="text-xs text-slate-600 break-keep">
+            안정적인 결제 환경을 점검 중입니다. 아래 무료 체험 기능은 정상적으로 이용하실 수 있습니다.
+          </p>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={onPaymentClick}
+          disabled={paymentState === "processing" || isGenerating}
+          className="w-full py-4 px-6 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 disabled:bg-blue-500 text-white font-bold text-base sm:text-lg rounded-xl shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2.5 cursor-pointer disabled:cursor-wait"
+        >
+          {paymentState === "processing" ? (
+            <>
+              <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              <span>{processingText}</span>
+            </>
+          ) : (
+            <>
+              <span>{displayPaidText}</span>
+              {paidButtonSubText && (
+                <span className="text-xs bg-blue-500/80 px-2 py-0.5 rounded font-normal">
+                  {paidButtonSubText}
+                </span>
+              )}
+            </>
+          )}
+        </button>
+      )}
 
       {/* 무료 생성 버튼 */}
       <button

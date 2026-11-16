@@ -127,6 +127,7 @@ const upstashUrl = `http://127.0.0.1:${upstashServer.address().port}`;
 process.env.UPSTASH_REDIS_REST_URL = upstashUrl;
 process.env.UPSTASH_REDIS_REST_TOKEN = "mock_token";
 process.env.TOSS_SECRET_KEY = "test_sk_MOCK";
+process.env.ADMIN_SECRET = "mock_admin_secret_p1_6_b";
 
 const tossCalls = [];
 let forcedConfirmAmount = null;
@@ -178,7 +179,10 @@ const resultsMod = await jiti.import(path.join(process.cwd(), "src/lib/results.t
 function makeJsonReq(url, method, body) {
   return new Request(url, {
     method,
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "x-admin-secret": "mock_admin_secret_p1_6_b",
+    },
     body: body ? JSON.stringify(body) : undefined,
   });
 }

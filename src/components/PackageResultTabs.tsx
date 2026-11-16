@@ -15,6 +15,7 @@ interface PackageResultTabsProps {
   isRetryingInterview?: boolean;
   onRetryInterview?: () => void;
   onUnlockClick?: () => void;
+  paymentLocked?: boolean;
   previewExpiresAt?: string | null;
 }
 
@@ -26,6 +27,7 @@ export default function PackageResultTabs({
   isRetryingInterview = false,
   onRetryInterview,
   onUnlockClick,
+  paymentLocked = false,
   previewExpiresAt,
 }: PackageResultTabsProps) {
   const [activeTab, setActiveTab] = useState<"resume" | "interview">("resume");
@@ -183,7 +185,7 @@ export default function PackageResultTabs({
             </div>
           ))}
 
-          {isPreviewMode && onUnlockClick && (
+          {isPreviewMode && (paymentLocked || onUnlockClick) && (
             <div className="p-5 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div className="space-y-1">
                 <p className="text-sm sm:text-base font-extrabold">
@@ -194,13 +196,19 @@ export default function PackageResultTabs({
                   {previewExpiresAt ? " (보관 중)." : "."}
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={onUnlockClick}
-                className="px-5 py-3 bg-white text-blue-700 hover:bg-blue-50 font-extrabold text-sm rounded-xl shadow-sm transition-colors cursor-pointer shrink-0"
-              >
-                4,900원으로 전체 잠금해제 →
-              </button>
+              {paymentLocked ? (
+                <div className="px-5 py-3 bg-white/95 text-slate-800 font-extrabold text-sm rounded-xl shadow-sm shrink-0">
+                  결제 서비스 준비 중입니다
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={onUnlockClick}
+                  className="px-5 py-3 bg-white text-blue-700 hover:bg-blue-50 font-extrabold text-sm rounded-xl shadow-sm transition-colors cursor-pointer shrink-0"
+                >
+                  4,900원으로 전체 잠금해제 →
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -217,14 +225,20 @@ export default function PackageResultTabs({
               <p className="text-xs sm:text-sm text-gray-600 max-w-lg mx-auto leading-relaxed break-keep">
                 결제 완료 즉시 위에서 생성된 4개 문항의 경험 진위, 압박 꼬리질문, 공직윤리/직무 상황 판단 질문 10개와 답변 가이드가 함께 잠금 해제됩니다.
               </p>
-              {onUnlockClick && (
-                <button
-                  type="button"
-                  onClick={onUnlockClick}
-                  className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm rounded-xl cursor-pointer transition-colors"
-                >
-                  4,900원 결제하고 면접 10선 함께 받기 →
-                </button>
+              {paymentLocked ? (
+                <span className="inline-block px-5 py-2.5 bg-slate-100 text-slate-700 border border-slate-200 font-bold text-sm rounded-xl">
+                  결제 서비스 준비 중입니다
+                </span>
+              ) : (
+                onUnlockClick && (
+                  <button
+                    type="button"
+                    onClick={onUnlockClick}
+                    className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm rounded-xl cursor-pointer transition-colors"
+                  >
+                    4,900원 결제하고 면접 10선 함께 받기 →
+                  </button>
+                )
               )}
             </div>
           ) : interviewQuestions.length === 0 ? (
