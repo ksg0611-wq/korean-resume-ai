@@ -5,6 +5,9 @@ export async function POST(req: Request) {
   return handleConfirmPaymentRequest(req, {
     serviceType: "interview",
     routePath: "/api/interview/payment",
-    allowedAmounts: [PRICING_PLANS.interview_single.price],
+    allowedAmounts: [
+      PRICING_PLANS.interview_single.price,
+      PRICING_PLANS.interview_upgrade.price,
+    ],
   });
 }

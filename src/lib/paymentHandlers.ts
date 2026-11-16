@@ -8,10 +8,12 @@ import {
   beginPaidGeneration,
   completePaidGeneration,
   consumePreviewForOrder,
+  getPaymentIntent,
   getStoredResultForOrder,
   handlePaidGenerationFailure,
   releaseOrderReservationWithoutDeduction,
   saveConfirmedOrder,
+  validateInterviewUpgradeEligibility,
 } from "@/lib/orders";
 import {
   formatFullPackageText,
@@ -38,7 +40,15 @@ export async function handleConfirmPaymentRequest(
 
   try {
     const body = await req.json();
-    const { paymentKey, orderId, amount, email } = body || {};
+    const {
+      paymentKey,
+      orderId,
+      amount,
+      email,
+      planType: bodyPlanType,
+      baseOrderId: bodyBaseOrderId,
+      baseResultToken: bodyBaseResultToken,
+    } = body || {};
     orderIdForLog = typeof orderId === "string" ? orderId : null;
 
     if (!paymentKey || !orderId || amount === undefined || amount === null) {
@@ -63,6 +73,58 @@ export async function handleConfirmPaymentRequest(
       );
     }
 
+    // 결제 준비 단계 의도(payment_intent:{orderId}) 조회 및 가격·업그레이드 자격 선검증
+    const intent = await getPaymentIntent(String(orderId));
+    if (intent && intent.expectedAmount !== numericAmount) {
+      return NextResponse.json(
+        {
+          message: `주문 금액(${intent.expectedAmount}원)과 요청 금액(${numericAmount}원)이 일치하지 않습니다.`,
+          code: "PAYMENT_INTENT_MISMATCH",
+        },
+        { status: 403 }
+      );
+    }
+
+    const cleanBodyBaseOrderId =
+      typeof bodyBaseOrderId === "string" ? bodyBaseOrderId.trim() : "";
+    const cleanBodyBaseToken =
+      typeof bodyBaseResultToken === "string" ? bodyBaseResultToken.trim() : "";
+    const effectiveBaseOrderId = intent?.baseOrderId || cleanBodyBaseOrderId || null;
+    const effectiveBaseToken = cleanBodyBaseToken || intent?.baseResultToken || null;
+    const cleanEmailHint = normalizeEmail(email) || intent?.email || null;
+
+    const isUpgradeAttempt =
+      serviceType === "interview" &&
+      (numericAmount === PRICING_PLANS.interview_upgrade.price ||
+        intent?.planType === "interview_upgrade" ||
+        bodyPlanType === "interview_upgrade");
+
+    if (isUpgradeAttempt) {
+      if (numericAmount !== PRICING_PLANS.interview_upgrade.price) {
+        return NextResponse.json(
+          {
+            message: "업그레이드 결제 금액이 올바르지 않습니다.",
+            code: "INVALID_UPGRADE_AMOUNT",
+          },
+          { status: 403 }
+        );
+      }
+      const eligibility = await validateInterviewUpgradeEligibility({
+        baseOrderId: effectiveBaseOrderId || "",
+        baseResultToken: effectiveBaseToken,
+        email: cleanEmailHint,
+      });
+      if (!eligibility.eligible) {
+        return NextResponse.json(
+          {
+            message: eligibility.message,
+            code: eligibility.code,
+          },
+          { status: 403 }
+        );
+      }
+    }
+
     const confirmResult = await confirmTossPayment({
       paymentKey,
       orderId,
@@ -83,20 +145,43 @@ export async function handleConfirmPaymentRequest(
         ? paymentData.totalAmount
         : numericAmount;
 
+    const confirmedMatchesRequested = confirmedAmount === numericAmount;
+    const confirmedMatchesIntent = !intent || confirmedAmount === intent.expectedAmount;
+    const confirmedAllowed =
+      !allowedAmounts || allowedAmounts.length === 0 || allowedAmounts.includes(confirmedAmount);
+
+    let postConfirmUpgradeOk = true;
     if (
-      allowedAmounts &&
-      allowedAmounts.length > 0 &&
-      !allowedAmounts.includes(confirmedAmount)
+      serviceType === "interview" &&
+      confirmedAmount === PRICING_PLANS.interview_upgrade.price
+    ) {
+      const recheck = await validateInterviewUpgradeEligibility({
+        baseOrderId: effectiveBaseOrderId || "",
+        baseResultToken: effectiveBaseToken,
+        email:
+          normalizeEmail(email) ||
+          normalizeEmail(paymentData?.customerEmail) ||
+          intent?.email ||
+          null,
+      });
+      postConfirmUpgradeOk = recheck.eligible;
+    }
+
+    if (
+      !confirmedMatchesRequested ||
+      !confirmedMatchesIntent ||
+      !confirmedAllowed ||
+      !postConfirmUpgradeOk
     ) {
       await cancelTossPayment({
         paymentKey,
-        cancelReason: `서버 검증 결제 금액 불일치 자동 취소 (${confirmedAmount}원)`,
+        cancelReason: `서버 검증 결제 금액·자격 불일치 자동 취소 (${confirmedAmount}원)`,
         orderId,
         route: routePath,
       });
       return NextResponse.json(
         {
-          message: "결제 금액 검증에 실패하여 자동 취소되었습니다.",
+          message: "결제 금액 또는 할인 자격 검증에 실패하여 자동 취소되었습니다.",
           code: "PAYMENT_AMOUNT_MISMATCH",
         },
         { status: 403 }
@@ -104,7 +189,7 @@ export async function handleConfirmPaymentRequest(
     }
 
     const resolvedEmail =
-      normalizeEmail(email) || normalizeEmail(paymentData?.customerEmail);
+      normalizeEmail(email) || normalizeEmail(paymentData?.customerEmail) || intent?.email || null;
 
     const inferredPlanType: PlanType =
       serviceType === "interview"
@@ -126,6 +211,8 @@ export async function handleConfirmPaymentRequest(
         typeof paymentData?.receipt?.url === "string"
           ? paymentData.receipt.url
           : null,
+      baseOrderId:
+        inferredPlanType === "interview_upgrade" ? effectiveBaseOrderId : null,
     });
 
     return NextResponse.json({
@@ -136,6 +223,8 @@ export async function handleConfirmPaymentRequest(
         orderId: order.orderId,
         serviceType: order.serviceType,
         planType: order.planType,
+        baseOrderId: order.baseOrderId ?? null,
+        linkedInterviewOrderId: order.linkedInterviewOrderId ?? null,
         status: order.status,
         amount: order.amount,
         paidAt: order.paidAt,
@@ -246,6 +335,8 @@ export async function executePaidGeneration(options: {
       order: {
         orderId: completed.order.orderId,
         serviceType: completed.order.serviceType,
+        planType: completed.order.planType ?? null,
+        linkedInterviewOrderId: completed.order.linkedInterviewOrderId ?? null,
         status: completed.order.status,
         usedCount: completed.order.usedCount,
         remainingGenerations: completed.order.remainingGenerations,
@@ -513,6 +604,8 @@ export async function executePaidPackageGeneration(options: {
         order: {
           orderId: completed.order.orderId,
           serviceType: completed.order.serviceType,
+          planType: completed.order.planType ?? null,
+          linkedInterviewOrderId: completed.order.linkedInterviewOrderId ?? null,
           status: completed.order.status,
           usedCount: completed.order.usedCount,
           remainingGenerations: completed.order.remainingGenerations,
@@ -659,6 +752,8 @@ export async function executePaidPackageGeneration(options: {
       order: {
         orderId: completed.order.orderId,
         serviceType: completed.order.serviceType,
+        planType: completed.order.planType ?? null,
+        linkedInterviewOrderId: completed.order.linkedInterviewOrderId ?? null,
         status: completed.order.status,
         usedCount: completed.order.usedCount,
         remainingGenerations: completed.order.remainingGenerations,

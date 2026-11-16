@@ -253,8 +253,11 @@ export async function POST(req: Request) {
         return NextResponse.json(
           {
             error:
-              "일시적인 생성 오류로 실패했습니다. 결제 횟수는 차감되지 않았으니 잠시 후 다시 시도해 주세요.",
+              order.planType === "bundle_companion"
+                ? "통합 패키지 내 면접 질문 초기 생성이 일시 지연되었습니다(interview_pending). 횟수는 차감되지 않았으니 잠시 후 다시 시도해 주세요. 장애 지속 시 고객센터 확인 후 차액 부분 환불을 도와드립니다."
+                : "일시적인 생성 오류로 실패했습니다. 결제 횟수는 차감되지 않았으니 잠시 후 다시 시도해 주세요.",
             code: "GENERATION_RETRY_ALLOWED",
+            interviewPending: order.planType === "bundle_companion",
             refunded: false,
           },
           { status: 503 }

@@ -16,6 +16,7 @@ import {
   getPreviewKey,
   getResultKey,
   hashResultToken,
+  timingSafeEqualStrings,
   type InterviewPrepNote,
   type InterviewQuestionItem,
   type OrderRecord,
@@ -260,8 +261,18 @@ export async function saveConfirmedOrder(options: {
   amount: number;
   email?: string | null;
   receiptUrl?: string | null;
+  baseOrderId?: string | null;
 }): Promise<{ order: OrderRecord; alreadyConfirmed: boolean }> {
-  const { orderId, serviceType, planType, paymentKey, amount, email, receiptUrl } = options;
+  const {
+    orderId,
+    serviceType,
+    planType,
+    paymentKey,
+    amount,
+    email,
+    receiptUrl,
+    baseOrderId,
+  } = options;
   const redis = requireRedisClient();
   const orderKey = getOrderKey(orderId, serviceType);
   const existing = await redis.get<OrderRecord>(orderKey);
@@ -273,14 +284,21 @@ export async function saveConfirmedOrder(options: {
 
   const now = new Date().toISOString();
   const cleanEmail = normalizeEmail(email);
+  const effectivePlanType: PlanType =
+    planType ??
+    (serviceType === "interview" ? "interview_single" : "resume_single");
   const initialGenerations = getInitialGenerationsForService(serviceType);
+  const linkedInterviewOrderId =
+    serviceType === "resume" && effectivePlanType === "bundle"
+      ? `int_${orderId}`
+      : null;
 
   const record: OrderRecord = {
     orderId,
     serviceType,
-    planType:
-      planType ??
-      (serviceType === "interview" ? "interview_single" : "resume_single"),
+    planType: effectivePlanType,
+    ...(baseOrderId ? { baseOrderId } : {}),
+    ...(linkedInterviewOrderId ? { linkedInterviewOrderId } : {}),
     paymentKey,
     amount: Number.isFinite(amount) ? amount : 0,
     email: cleanEmail,
@@ -312,6 +330,63 @@ export async function saveConfirmedOrder(options: {
 
   await redis.set(orderKey, record, { ex: PAID_ORDER_TTL_SECONDS });
   await indexOrderKey(orderKey);
+
+  // 통합 패키지(7,900원): 별도 키 order:interview:int_{orderId} 연동 이용권 자동 발급
+  if (linkedInterviewOrderId) {
+    const companionKey = getOrderKey(linkedInterviewOrderId, "interview");
+    const companionRecord: OrderRecord = {
+      orderId: linkedInterviewOrderId,
+      serviceType: "interview",
+      planType: "bundle_companion",
+      baseOrderId: orderId,
+      paymentKey,
+      amount: 0,
+      email: cleanEmail,
+      receiptUrl: receiptUrl ?? null,
+      paid: true,
+      status: "paid",
+      totalGenerations: PAID_INTERVIEW_GENERATIONS,
+      remainingGenerations: PAID_INTERVIEW_GENERATIONS,
+      usedCount: 0,
+      paidAt: now,
+      generatingAt: null,
+      generatingAtMs: null,
+      generatingLockToken: null,
+      reservedGeneration: false,
+      doneAt: null,
+      failedAt: null,
+      refundedAt: null,
+      updatedAt: now,
+      usedModel: null,
+      lastError: null,
+      refundAmount: null,
+      refundTransactionKey: null,
+      refundReason: null,
+      resultTokenHash: null,
+      resultExpiresAt: null,
+      activeSessionId: null,
+      verified: true,
+    };
+    await redis.set(companionKey, companionRecord, { ex: PAID_ORDER_TTL_SECONDS });
+    await indexOrderKey(companionKey);
+  }
+
+  // 자소서 구매자 업그레이드(+3,000원): 기준 자소서 주문 1회 업그레이드 완료 바인딩
+  if (serviceType === "interview" && effectivePlanType === "interview_upgrade" && baseOrderId) {
+    const baseKey = getOrderKey(baseOrderId, "resume");
+    const baseOrder = await redis.get<OrderRecord>(baseKey);
+    if (baseOrder && typeof baseOrder === "object") {
+      const baseTtl = await redis.ttl(baseKey);
+      const updatedBase: OrderRecord = {
+        ...baseOrder,
+        upgradedToInterviewOrderId: orderId,
+        updatedAt: now,
+      };
+      await redis.set(baseKey, updatedBase, {
+        ex: baseTtl > 0 ? baseTtl : PAID_ORDER_TTL_SECONDS,
+      });
+    }
+  }
 
   return { order: record, alreadyConfirmed: false };
 }
@@ -437,6 +512,9 @@ export async function completePaidGeneration(options: {
   const storedResult: StoredResultRecord = {
     orderId: order.orderId,
     serviceType: order.serviceType,
+    ...(order.linkedInterviewOrderId
+      ? { linkedInterviewOrderId: order.linkedInterviewOrderId }
+      : {}),
     token: resultToken,
     tokenHash: resultTokenHash,
     title,
@@ -784,6 +862,28 @@ export async function handlePaidGenerationFailure(options: {
     return { outcome: "retry_allowed", order: recoveredOrder };
   }
 
+  // 통합 패키지(7,900원) 연동 면접권(bundle_companion)은 7,900원 전액 자동 취소하지 않고 interview_pending 기록 + 무료 재시도 허용
+  if (order.planType === "bundle_companion") {
+    const pendingOrder: OrderRecord = {
+      ...order,
+      status: "interview_pending",
+      remainingGenerations: restoredRemaining,
+      reservedGeneration: false,
+      generatingLockToken: null,
+      generatingAtMs: null,
+      failedAt: nowIso,
+      updatedAt: nowIso,
+      lastError: safeErr,
+    };
+    await persistOrderAndReleaseLock({
+      orderKey,
+      order: pendingOrder,
+      expectedLockToken: lockToken,
+    });
+    await indexOrderKey(orderKey);
+    return { outcome: "retry_allowed", order: pendingOrder };
+  }
+
   // usedCount === 0 -> paymentKey 필수 확인 후 토스 전액 결제 취소 실행
   if (!order.paymentKey) {
     const failedOrder: OrderRecord = {
@@ -857,6 +957,47 @@ export async function handlePaidGenerationFailure(options: {
       forceSave: true,
     });
     await indexOrderKey(orderKey);
+
+    const redis = requireRedisClient();
+    // 통합 패키지 전액 환불 시 연동 면접 이용권도 함께 무효화
+    if (order.linkedInterviewOrderId) {
+      const companionKey = getOrderKey(order.linkedInterviewOrderId, "interview");
+      const companion = await redis.get<OrderRecord>(companionKey);
+      if (companion && typeof companion === "object") {
+        const companionTtl = await redis.ttl(companionKey);
+        await redis.set(
+          companionKey,
+          {
+            ...companion,
+            paid: false,
+            remainingGenerations: 0,
+            status: "refunded" as const,
+            refundedAt: nowIso,
+            updatedAt: nowIso,
+            refundReason: "통합 패키지 전액 자동 환불 연동 무효화",
+          },
+          { ex: companionTtl > 0 ? companionTtl : PAID_ORDER_TTL_SECONDS }
+        );
+      }
+    }
+
+    // 면접 업그레이드(+3,000원)가 최초 생성 실패로 전액 환불된 경우 기준 자소서 주문의 업그레이드 잠금 해제
+    if (order.planType === "interview_upgrade" && order.baseOrderId) {
+      const baseKey = getOrderKey(order.baseOrderId, "resume");
+      const baseOrder = await redis.get<OrderRecord>(baseKey);
+      if (baseOrder && baseOrder.upgradedToInterviewOrderId === order.orderId) {
+        const baseTtl = await redis.ttl(baseKey);
+        await redis.set(
+          baseKey,
+          {
+            ...baseOrder,
+            upgradedToInterviewOrderId: null,
+            updatedAt: nowIso,
+          },
+          { ex: baseTtl > 0 ? baseTtl : PAID_ORDER_TTL_SECONDS }
+        );
+      }
+    }
 
     return {
       outcome: "refunded",
@@ -994,4 +1135,280 @@ export async function listAdminOrders(options?: {
   });
 
   return { summary, orders: filtered };
+}
+
+export const PAYMENT_INTENT_TTL_SECONDS = 1_800;
+
+export interface PaymentIntentRecord {
+  orderId: string;
+  planType: Exclude<PlanType, "bundle_companion">;
+  expectedAmount: number;
+  baseOrderId?: string | null;
+  baseResultToken?: string | null;
+  email?: string | null;
+  createdAt: string;
+}
+
+export function getPaymentIntentKey(orderId: string): string {
+  return `payment_intent:${orderId}`;
+}
+
+export async function savePaymentIntent(
+  options: Omit<PaymentIntentRecord, "createdAt">
+): Promise<PaymentIntentRecord> {
+  const redis = requireRedisClient();
+  const record: PaymentIntentRecord = {
+    ...options,
+    createdAt: new Date().toISOString(),
+  };
+  await redis.set(getPaymentIntentKey(options.orderId), record, {
+    ex: PAYMENT_INTENT_TTL_SECONDS,
+  });
+  return record;
+}
+
+export async function getPaymentIntent(
+  orderId: string
+): Promise<PaymentIntentRecord | null> {
+  const cleanOrderId = orderId?.trim();
+  if (!cleanOrderId) return null;
+  const redis = requireRedisClient();
+  const raw = await redis.get<PaymentIntentRecord>(getPaymentIntentKey(cleanOrderId));
+  return raw && typeof raw === "object" ? raw : null;
+}
+
+export type UpgradeEligibilityResult =
+  | {
+      eligible: true;
+      baseOrder: OrderRecord;
+      jobTitle: string | null;
+      resumeText: string | null;
+      resumeExpired: boolean;
+      upgradedOrderId: null;
+    }
+  | {
+      eligible: false;
+      code:
+        | "BASE_ORDER_NOT_FOUND"
+        | "BASE_ORDER_REFUNDED"
+        | "BASE_ORDER_NOT_RESUME_SINGLE"
+        | "ALREADY_UPGRADED"
+        | "UPGRADE_OWNERSHIP_FAILED";
+      message: string;
+      upgradedOrderId?: string | null;
+      baseOrder?: OrderRecord | null;
+    };
+
+function extractResumeTextFromStoredResult(
+  result: StoredResultRecord | null
+): string | null {
+  if (!result) return null;
+  let candidate = "";
+  if (Array.isArray(result.items) && result.items.length > 0) {
+    candidate = result.items
+      .map((item) => `[${item.title}]\n${item.body}`)
+      .join("\n\n")
+      .trim();
+  } else if (typeof result.sourceMemo === "string" && result.sourceMemo.trim()) {
+    candidate = result.sourceMemo.trim();
+  } else if (typeof result.text === "string" && result.text.trim()) {
+    candidate = result.text.trim();
+  }
+  if (!candidate) return null;
+  return candidate.length > 4000 ? candidate.slice(0, 4000) : candidate;
+}
+
+/**
+ * +3,000원 면접 업그레이드 자격·소유권·1회 제한 서버 검증
+ * - 자소서 단독 유료 주문(미환불) 실존 여부 + 이미 업그레이드 여부 + 토큰/이메일 소유권 확인
+ * - 7일 result:* 만료 시에도 1년 order:* 기준으로 할인 자격 유지 + resumeExpired: true 반환
+ */
+export async function validateInterviewUpgradeEligibility(options: {
+  baseOrderId: string;
+  baseResultToken?: string | null;
+  email?: string | null;
+}): Promise<UpgradeEligibilityResult> {
+  const cleanBaseOrderId = options.baseOrderId?.trim();
+  const cleanToken = options.baseResultToken?.trim() || null;
+  const cleanEmail = normalizeEmail(options.email);
+
+  if (!cleanBaseOrderId) {
+    return {
+      eligible: false,
+      code: "BASE_ORDER_NOT_FOUND",
+      message: "업그레이드 대상 자소서 주문번호가 누락되었습니다.",
+    };
+  }
+
+  const redis = requireRedisClient();
+  const baseOrder = await redis.get<OrderRecord>(getOrderKey(cleanBaseOrderId, "resume"));
+
+  if (!baseOrder || typeof baseOrder !== "object" || baseOrder.paid !== true) {
+    return {
+      eligible: false,
+      code: "BASE_ORDER_NOT_FOUND",
+      message: "유효한 유료 자소서 주문 내역을 찾을 수 없습니다.",
+    };
+  }
+
+  if (baseOrder.status === "refunded" || baseOrder.status === "refund_failed") {
+    return {
+      eligible: false,
+      code: "BASE_ORDER_REFUNDED",
+      message: "환불 완료 또는 환불 처리 중인 주문에는 업그레이드 할인을 적용할 수 없습니다.",
+    };
+  }
+
+  if (
+    baseOrder.serviceType !== "resume" ||
+    baseOrder.planType === "bundle" ||
+    Boolean(baseOrder.linkedInterviewOrderId)
+  ) {
+    return {
+      eligible: false,
+      code: "BASE_ORDER_NOT_RESUME_SINGLE",
+      message: "통합 패키지 주문은 이미 면접 시뮬레이터 이용권이 포함되어 있습니다.",
+    };
+  }
+
+  if (baseOrder.upgradedToInterviewOrderId) {
+    return {
+      eligible: false,
+      code: "ALREADY_UPGRADED",
+      message: "해당 자소서 주문은 이미 +3,000원 면접 업그레이드가 적용되었습니다.",
+      upgradedOrderId: baseOrder.upgradedToInterviewOrderId,
+      baseOrder,
+    };
+  }
+
+  // 소유권 검증: resultTokenHash(1년 보관) 우선, 미생성/유실 시 주문 이메일 대조 필수
+  if (baseOrder.resultTokenHash) {
+    if (cleanToken) {
+      const candidateHash = await hashResultToken(cleanToken);
+      if (!timingSafeEqualStrings(candidateHash, baseOrder.resultTokenHash)) {
+        return {
+          eligible: false,
+          code: "UPGRADE_OWNERSHIP_FAILED",
+          message: "업그레이드 인증 토큰이 일치하지 않습니다.",
+        };
+      }
+    } else if (!cleanEmail || !baseOrder.email || cleanEmail !== baseOrder.email) {
+      return {
+        eligible: false,
+        code: "UPGRADE_OWNERSHIP_FAILED",
+        message: "자소서 주문 소유권 확인을 위해 결과 링크 토큰 또는 구매 당시 이메일이 필요합니다.",
+      };
+    }
+  } else if (!cleanEmail || !baseOrder.email || cleanEmail !== baseOrder.email) {
+    return {
+      eligible: false,
+      code: "UPGRADE_OWNERSHIP_FAILED",
+      message: "자소서 구매 당시 이메일 정보와 일치하지 않아 업그레이드할 수 없습니다.",
+    };
+  }
+
+  const storedResult = await redis.get<StoredResultRecord>(getResultKey(cleanBaseOrderId));
+  const expiresAtMs = storedResult?.expiresAt
+    ? Date.parse(storedResult.expiresAt)
+    : baseOrder.resultExpiresAt
+      ? Date.parse(baseOrder.resultExpiresAt)
+      : NaN;
+  const expired =
+    !storedResult || (Number.isFinite(expiresAtMs) && Date.now() > expiresAtMs);
+  const resumeText = expired ? null : extractResumeTextFromStoredResult(storedResult);
+
+  return {
+    eligible: true,
+    baseOrder,
+    jobTitle: storedResult?.jobTitle ?? null,
+    resumeText,
+    resumeExpired: expired || !resumeText,
+    upgradedOrderId: null,
+  };
+}
+
+/**
+ * 통합 패키지(bundle) 또는 업그레이드 완료 주문에서 자소서 원문/연동 면접 주문 상태 복구
+ */
+export async function resolveBundledInterviewContext(options: {
+  baseOrderId: string;
+  baseResultToken?: string | null;
+}): Promise<{
+  ok: boolean;
+  linkedInterviewOrderId: string | null;
+  remainingGenerations: number;
+  jobTitle: string | null;
+  resumeText: string | null;
+  resumeExpired: boolean;
+}> {
+  const cleanBaseOrderId = options.baseOrderId?.trim();
+  const cleanToken = options.baseResultToken?.trim() || "";
+  if (!cleanBaseOrderId) {
+    return {
+      ok: false,
+      linkedInterviewOrderId: null,
+      remainingGenerations: 0,
+      jobTitle: null,
+      resumeText: null,
+      resumeExpired: true,
+    };
+  }
+
+  const redis = requireRedisClient();
+  const baseOrder = await redis.get<OrderRecord>(getOrderKey(cleanBaseOrderId, "resume"));
+  const interviewOrderId =
+    baseOrder?.linkedInterviewOrderId || `int_${cleanBaseOrderId}`;
+  const companionOrder = await redis.get<OrderRecord>(
+    getOrderKey(interviewOrderId, "interview")
+  );
+
+  if (
+    !baseOrder ||
+    baseOrder.paid !== true ||
+    baseOrder.status === "refunded" ||
+    !companionOrder ||
+    companionOrder.paid !== true ||
+    companionOrder.status === "refunded"
+  ) {
+    return {
+      ok: false,
+      linkedInterviewOrderId: null,
+      remainingGenerations: 0,
+      jobTitle: null,
+      resumeText: null,
+      resumeExpired: true,
+    };
+  }
+
+  let resumeText: string | null = null;
+  let jobTitle: string | null = null;
+  let resumeExpired = true;
+
+  if (baseOrder.resultTokenHash && cleanToken) {
+    const candidateHash = await hashResultToken(cleanToken);
+    if (timingSafeEqualStrings(candidateHash, baseOrder.resultTokenHash)) {
+      const storedResult = await redis.get<StoredResultRecord>(
+        getResultKey(cleanBaseOrderId)
+      );
+      const expiresAtMs = storedResult?.expiresAt
+        ? Date.parse(storedResult.expiresAt)
+        : NaN;
+      const expired =
+        !storedResult || (Number.isFinite(expiresAtMs) && Date.now() > expiresAtMs);
+      if (!expired && storedResult) {
+        resumeText = extractResumeTextFromStoredResult(storedResult);
+        jobTitle = storedResult.jobTitle ?? null;
+        resumeExpired = !resumeText;
+      }
+    }
+  }
+
+  return {
+    ok: true,
+    linkedInterviewOrderId: companionOrder.orderId,
+    remainingGenerations: companionOrder.remainingGenerations,
+    jobTitle,
+    resumeText,
+    resumeExpired,
+  };
 }

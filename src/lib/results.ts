@@ -5,6 +5,7 @@ export type PlanType =
   | "resume_single"
   | "interview_single"
   | "bundle"
+  | "bundle_companion"
   | "interview_upgrade";
 export type OrderStatus =
   | "paid"
@@ -19,6 +20,9 @@ export interface OrderRecord {
   orderId: string;
   serviceType: ServiceType;
   planType?: PlanType;
+  baseOrderId?: string | null;
+  linkedInterviewOrderId?: string | null;
+  upgradedToInterviewOrderId?: string | null;
   paymentKey: string;
   amount: number;
   email?: string | null;
@@ -133,6 +137,7 @@ export interface InterviewPrepNote {
 export interface StoredResultRecord {
   orderId: string;
   serviceType: ServiceType;
+  linkedInterviewOrderId?: string | null;
   token: string;
   tokenHash: string;
   title: string;
