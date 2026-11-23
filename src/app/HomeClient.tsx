@@ -3,7 +3,15 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import Link from "next/link";
 import { loadPaymentWidget, PaymentWidgetInstance } from "@tosspayments/payment-widget-sdk";
-import PreviewCard from "@/components/PreviewCard";
+import {
+  FinalCta,
+  HeroReportCard,
+  HowItWorks,
+  PricingCards,
+  SafetyPoints,
+  ShowcaseSection,
+  TrustBar,
+} from "@/components/LandingSections";
 import PaymentSection from "@/components/PaymentSection";
 import PackageComparisonTable from "@/components/PackageComparisonTable";
 import DiagnosisReportView from "@/components/DiagnosisReportView";
@@ -943,17 +951,17 @@ export default function Home({
         <section className="grid grid-cols-1 md:grid-cols-2 gap-10 lg:gap-14 items-center py-2 sm:py-8">
           <div className="flex flex-col text-left break-keep">
             <p className="text-sm sm:text-base font-semibold text-blue-600 mb-4">
-              공공기관 · 대기업 서류와 면접 준비
+              공공기관 · 공기업 · 대기업 서류와 면접
             </p>
 
-            <h1 className="text-[2rem] leading-[1.28] sm:text-5xl sm:leading-[1.2] font-bold text-gray-900 mb-5">
-              내 자소서의 감점 요인,<br />
-              <span className="text-blue-600">AI가 먼저 찾아드립니다</span>
+            <h1 className="text-[2rem] leading-[1.28] sm:text-5xl sm:leading-[1.2] font-extrabold text-gray-900 mb-5">
+              자소서, 내기 전에<br />
+              <span className="text-blue-600">감점 요인부터</span> 잡으세요
             </h1>
 
             <p className="text-base sm:text-lg text-gray-600 leading-relaxed mb-8">
-              붙여넣기만 하면 100점 기준으로 채점하고 고칠 문장을 짚어 드려요.
-              필요하면 4문항 완성본과 예상 면접 질문까지 한 번에 준비할 수 있어요.
+              붙여넣기만 하면 STAR 구조, 수치 구체성, 블라인드 규정, 분량을 100점 기준으로 채점하고
+              고칠 문장을 짚어 드립니다.
             </p>
 
             <div className="flex flex-col sm:flex-row sm:items-center gap-3">
@@ -976,33 +984,12 @@ export default function Home({
             </div>
 
             <p className="mt-4 text-sm text-gray-500">
-              {`무료 진단 하루 ${FREE_LIMITS.resume}회 · 완성 패키지 ${PRICE_DISPLAY}원 · 구독 없는 1회 결제`}
+              {`회원가입 없이 하루 ${FREE_LIMITS.resume}회 무료 · 원문은 서버에 저장하지 않습니다`}
             </p>
-
-            <ul className="mt-8 pt-6 border-t border-gray-200/70 flex flex-wrap gap-x-6 gap-y-3 text-sm text-gray-600">
-              <li className="flex items-center gap-2">
-                <svg className="w-4 h-4 text-gray-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                </svg>
-                토스페이먼츠 안전결제
-              </li>
-              <li className="flex items-center gap-2">
-                <svg className="w-4 h-4 text-gray-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-                생성 실패 시 자동 전액 환불
-              </li>
-              <li className="flex items-center gap-2">
-                <svg className="w-4 h-4 text-gray-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                </svg>
-                자소서 원문 서버 미저장
-              </li>
-            </ul>
           </div>
 
           <div className="w-full">
-            <PreviewCard />
+            <HeroReportCard />
           </div>
         </section>
 
@@ -1045,6 +1032,9 @@ export default function Home({
             </button>
           </section>
         )}
+
+        <TrustBar />
+        <HowItWorks />
 
         {/* [2모드 입력 폼 섹션] */}
         <section id="resume-form" className="scroll-mt-20 bg-white p-6 sm:p-8 rounded-2xl shadow-sm border border-gray-200 space-y-5">
@@ -1471,8 +1461,15 @@ export default function Home({
           />
         </div>
 
+        {/* [랜딩 섹션: 교정 전/후 · 가격 · 안심 포인트] */}
+        <ShowcaseSection />
+        <PricingCards onStart={scrollToForm} />
+        <SafetyPoints />
+
         {/* [FAQ 섹션] */}
         <FAQAccordion />
+
+        <FinalCta onStart={scrollToForm} />
 
       </div>
     </main>

@@ -53,6 +53,12 @@ export default function RootLayout({
               <Link href="/blog" className="text-gray-700 hover:text-blue-600 transition-colors">
                 블로그
               </Link>
+              <Link
+                href="/#resume-form"
+                className="hidden sm:inline-flex items-center min-h-[40px] px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-semibold transition-colors"
+              >
+                무료 진단
+              </Link>
             </nav>
           </div>
         </header>
