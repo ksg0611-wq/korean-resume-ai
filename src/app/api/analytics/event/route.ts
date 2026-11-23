@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 
 /**
  * 비식별 전환 퍼널 이벤트 수집 엔드포인트
- * - 허용 이벤트 7종 + source(blog/jobs/direct) + planType만 수락
+ * - 허용 이벤트 8종 + source(blog/jobs/direct) + planType만 수락
  * - IP·이메일·본문 등 개인정보는 읽거나 저장하지 않습니다.
  */
 export async function POST(req: Request) {

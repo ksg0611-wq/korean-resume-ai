@@ -51,6 +51,11 @@ export default function PrivacyPage() {
                 <td className={td}>해당 기관 신규 채용공고 오픈 알림 발송</td>
               </tr>
               <tr>
+                <td className={td}>결제 오픈 알림 신청 (선택)</td>
+                <td className={td}>이메일 주소, 광고성 정보 수신 동의 여부·동의 일시</td>
+                <td className={td}>유료 결제 기능 오픈 안내 이메일 1회 발송</td>
+              </tr>
+              <tr>
                 <td className={td}>서비스 이용·전환 분석 (비식별)</td>
                 <td className={td}>세션 유입 경로 구분(blog / jobs / direct), 선택한 상품 유형(planType), 기능 실행 및 결제 단계 이벤트명 (자소서 본문·답변·이메일·이름·IP 등 개인식별정보는 일절 포함하지 않음)</td>
                 <td className={td}>기능 이용 현황 파악, 오류 대응 및 서비스 품질 개선 (일별 집계 카운터 및 Google Analytics 4 연동 시 비식별 통계 측정)</td>
@@ -114,6 +119,11 @@ export default function PrivacyPage() {
                 <td className={td}>해당 기관 신규 공고 알림 발송 목적 달성 시(기존 사전신청 건은 정식 오픈 알림 1회 발송 후)까지 보관·파기하며, 삭제 요청 시 지체 없이 삭제합니다.</td>
               </tr>
               <tr>
+                <td className={td}>결제 오픈 알림 신청 이메일</td>
+                <td className={td}>회사 DB (launch_notify_signups)</td>
+                <td className={td}>결제 오픈 안내 1회 발송 후 지체 없이 파기하며, 그 전이라도 수신 거부·삭제 요청 시 즉시 삭제합니다.</td>
+              </tr>
+              <tr>
                 <td className={td}>비식별 전환·이용 통계 카운터 (analytics:funnel:*)</td>
                 <td className={td}>Redis 일별 통계 카운터 (개인정보 미포함)</td>
                 <td className={td}>집계일(KST)로부터 최대 35일 보관 후 자동 파기됩니다.</td>
@@ -158,7 +168,7 @@ export default function PrivacyPage() {
               </tr>
               <tr>
                 <td className={td}>Vercel Inc. / Upstash, Inc. / Supabase, Inc.</td>
-                <td className={td}>웹 호스팅, 이용 횟수 카운터·재열람 링크 임시 저장(Redis) 및 데이터베이스 운영 등 클라우드 인프라</td>
+                <td className={td}>웹 호스팅, 이용 횟수 카운터·재열람 링크 임시 저장(Redis) 및 데이터베이스 운영 등 클라우드 인프라, Vercel Web Analytics를 통한 비식별 방문 통계(쿠키 미사용, 페이지 경로·유입 경로·기기 유형, 주문번호·쿼리 정보 제외)</td>
                 <td className={td}>미국(사업자 소재국). 실제 데이터 저장 지역은 각 서비스 설정에 따릅니다.</td>
               </tr>
               <tr>

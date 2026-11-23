@@ -3,6 +3,7 @@ import Link from "next/link";
 import "./globals.css";
 import Footer from "@/components/Footer";
 import AnalyticsScripts from "@/components/AnalyticsScripts";
+import VercelAnalytics from "@/components/VercelAnalytics";
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://korea-resume.com'),
@@ -50,6 +51,7 @@ export default function RootLayout({
         {children}
         <Footer />
         <AnalyticsScripts gaId={process.env.NEXT_PUBLIC_GA_ID ?? null} />
+        <VercelAnalytics />
       </body>
     </html>
   );

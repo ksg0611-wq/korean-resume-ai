@@ -1,7 +1,7 @@
 /**
  * 비식별 전환 퍼널 측정 (클라이언트·공용)
  *
- * - 수집 이벤트 7종: diagnose_run, draft_run, checkout_click, payment_success, payment_fail, job_cta_click, interview_free_run
+ * - 수집 이벤트 8종: diagnose_run, draft_run, checkout_click, payment_success, payment_fail, job_cta_click, interview_free_run, launch_notify_signup
  * - 개인정보 보호 원칙: 자소서 본문, 이메일, 이름, 주문번호, IP 등 PII는 절대 수집·전송하지 않습니다.
  * - 유입 경로(source)와 상품 유형(planType)만 허용 목록으로 정규화해 GA4(gtag) 및 Redis 비식별 퍼널 API로 기록합니다.
  */
@@ -14,6 +14,7 @@ export const ANALYTICS_EVENTS = [
   "payment_fail",
   "job_cta_click",
   "interview_free_run",
+  "launch_notify_signup",
 ] as const;
 
 export type AnalyticsEventName = (typeof ANALYTICS_EVENTS)[number];

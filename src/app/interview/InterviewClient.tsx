@@ -1014,6 +1014,7 @@ function InterviewContent({
 
             <div id="interview-payment-anchor" className="scroll-mt-20">
               <PaymentSection
+                launchNotifySource="interview"
                 priceDisplay={currentPriceDisplay}
                 title={
                   upgradeContext?.eligible

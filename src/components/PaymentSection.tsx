@@ -8,6 +8,8 @@ import {
   freeLimitButtonText,
 } from "@/lib/policy";
 import { BUSINESS_INFO } from "@/lib/siteConfig";
+import LaunchNotifyForm from "@/components/LaunchNotifyForm";
+import type { LaunchNotifySource } from "@/lib/launchNotify";
 
 export interface PaymentSectionProps {
   priceDisplay?: string;
@@ -42,6 +44,7 @@ export interface PaymentSectionProps {
   widgetContainerId?: string;
   agreementContainerId?: string;
   paymentLocked?: boolean;
+  launchNotifySource?: LaunchNotifySource;
   kakaoChannelUrl?: string | null;
   comparisonTable?: React.ReactNode;
   bundleAddOn?: {
@@ -86,6 +89,7 @@ export default function PaymentSection({
   widgetContainerId = "payment-widget",
   agreementContainerId = "agreement",
   paymentLocked = false,
+  launchNotifySource = "resume",
   kakaoChannelUrl,
   comparisonTable,
   bundleAddOn,
@@ -395,6 +399,7 @@ export default function PaymentSection({
           <p className="text-xs text-slate-600 break-keep">
             안정적인 결제 환경을 점검 중입니다. 아래 무료 체험 기능은 정상적으로 이용하실 수 있습니다.
           </p>
+          <LaunchNotifyForm source={launchNotifySource} />
         </div>
       ) : (
         <button

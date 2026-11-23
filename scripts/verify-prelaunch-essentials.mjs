@@ -1,6 +1,6 @@
 /**
  * Pre-Launch Essentials Verification Suite
- * 1. Conversion analytics (7 events: diagnose_run, draft_run, checkout_click, payment_success, payment_fail, job_cta_click, interview_free_run)
+ * 1. Conversion analytics (8 events: diagnose_run, draft_run, checkout_click, payment_success, payment_fail, job_cta_click, interview_free_run, launch_notify_signup)
  *    - Validates strict allowlist (source: blog/jobs/direct, planType)
  *    - Ensures zero PII (email, text, IP) leaks into Redis keys or responses
  *    - Verifies Redis counters `analytics:funnel:YYYY-MM-DD:*` increment & `/api/admin/orders` returns `analyticsFunnel`
@@ -171,6 +171,7 @@ try {
     { event: "checkout_click", source: "jobs", planType: "bundle" },
     { event: "payment_success", source: "jobs", planType: "bundle" },
     { event: "payment_fail", source: "blog", planType: "interview_single" },
+    { event: "launch_notify_signup", source: "direct", planType: "unknown" },
   ];
 
   let recordedDate = "";
@@ -219,7 +220,7 @@ try {
   assert.equal(adminData.analyticsFunnel.date, recordedDate);
   assert.equal(adminData.analyticsFunnel.totalsBySource.jobs, 4);
   assert.equal(adminData.analyticsFunnel.totalsBySource.blog, 2);
-  assert.equal(adminData.analyticsFunnel.totalsBySource.direct, 1);
+  assert.equal(adminData.analyticsFunnel.totalsBySource.direct, 2);
   for (const ev of analytics.ANALYTICS_EVENTS) {
     assert.equal(
       adminData.analyticsFunnel.totalsByEvent[ev],
@@ -228,7 +229,7 @@ try {
     );
   }
   assert.equal(adminData.analyticsFunnel.conversionRates.checkoutToSuccessPct, 100);
-  console.log("PASS 1: All 7 funnel events, source/plan breakdowns, zero-PII & /api/admin/orders aggregation verified");
+  console.log("PASS 1: All 8 funnel events, source/plan breakdowns, zero-PII & /api/admin/orders aggregation verified");
 
   // ── 2. AI Draft Review Notice across .txt formatters, email, API, and UI files ──
   const notice = policy.AI_DRAFT_REVIEW_NOTICE;

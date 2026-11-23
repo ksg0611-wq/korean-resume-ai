@@ -16,6 +16,7 @@ const FUNNEL_EVENT_LABELS: Record<AnalyticsEventName, string> = {
   checkout_click: "결제하기 클릭 (checkout_click)",
   payment_success: "결제 승인 완료 (payment_success)",
   payment_fail: "결제 실패·취소 (payment_fail)",
+  launch_notify_signup: "결제 오픈 알림 신청 (launch_notify_signup)",
 };
 
 type AdminOrderRow = OrderRecord & { isMismatch?: boolean; isStuck?: boolean };
