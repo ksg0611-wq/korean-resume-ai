@@ -940,92 +940,65 @@ export default function Home({
         )}
 
         {/* [히어로 영역] */}
-        <section className="grid grid-cols-1 md:grid-cols-2 gap-8 lg:gap-12 items-start">
+        <section className="grid grid-cols-1 md:grid-cols-2 gap-10 lg:gap-14 items-center py-2 sm:py-8">
           <div className="flex flex-col text-left break-keep">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-bold border border-emerald-200 self-start mb-4">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span>공공기관 · 대기업 서류 &amp; 면접 AI 패키지</span>
-            </div>
-
-            <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-gray-900 tracking-tight leading-[1.2] mb-3">
-              내 자소서 약점 진단부터<br />
-              <span className="text-blue-600">4문항 완성본·면접 10선</span>까지
-            </h1>
-
-            <p className="text-base sm:text-lg text-gray-600 mb-6 leading-relaxed">
-              이미 쓴 자소서는 무료 채점으로 감점 요인을 잡고, 메모만 있으면 표준 4문항 완성본과 예상 면접 질문 10선을 한 번에 준비하세요.
+            <p className="text-sm sm:text-base font-semibold text-blue-600 mb-4">
+              공공기관 · 대기업 서류와 면접 준비
             </p>
 
-            {/* 패키지 요약 가격 카드 */}
-            <div className="bg-white border border-blue-100 rounded-2xl p-5 shadow-sm mb-6 flex flex-col gap-2.5">
-              <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <div className="flex flex-wrap items-baseline gap-2.5">
-                  <span className="text-sm font-bold text-gray-800">
-                    공고 지원 완성 패키지
-                  </span>
-                  <span className="text-3xl sm:text-4xl font-extrabold text-blue-600 tracking-tight">
-                    {PRICE_DISPLAY}원
-                  </span>
-                  <span className="text-xs font-semibold text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
-                    단건 결제 · 구독 없음
-                  </span>
-                </div>
-              </div>
-              <p className="text-xs sm:text-sm text-gray-700 font-medium">
-                자소서 4문항 전체(약 2,000자) + 내 자소서 기반 예상 면접 질문 10선
-              </p>
-              <div className="flex items-center gap-1.5 text-xs sm:text-sm font-semibold text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-200 self-start">
-                <svg className="w-4 h-4 text-emerald-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                </svg>
-                <span>{`1회 결제 · ${PAID_GENERATIONS_BREAKDOWN} + 7일 재열람 링크 포함`}</span>
-              </div>
-            </div>
+            <h1 className="text-[2rem] leading-[1.28] sm:text-5xl sm:leading-[1.2] font-bold text-gray-900 mb-5">
+              내 자소서의 감점 요인,<br />
+              <span className="text-blue-600">AI가 먼저 찾아드립니다</span>
+            </h1>
 
-            <div className="flex flex-col gap-2.5">
+            <p className="text-base sm:text-lg text-gray-600 leading-relaxed mb-8">
+              붙여넣기만 하면 100점 기준으로 채점하고 고칠 문장을 짚어 드려요.
+              필요하면 4문항 완성본과 예상 면접 질문까지 한 번에 준비할 수 있어요.
+            </p>
+
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
               <button
                 onClick={() => scrollToForm("diagnose")}
-                className="w-full py-4 px-6 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold text-base sm:text-lg rounded-xl shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer"
+                className="w-full sm:w-auto py-4 px-7 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-semibold text-base sm:text-lg rounded-2xl shadow-lg shadow-blue-600/20 transition-colors flex items-center justify-center gap-2 cursor-pointer"
               >
-                <span>{`무료 자소서 진단 · 미리보기 (일 ${FREE_LIMITS.resume}회)`}</span>
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                <span>무료로 자소서 진단받기</span>
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
                 </svg>
               </button>
 
               <Link
                 href="/sample"
-                className="text-xs sm:text-sm text-blue-600 hover:text-blue-800 underline font-semibold text-center py-1 transition-colors"
+                className="w-full sm:w-auto py-4 px-6 text-center text-base font-semibold text-gray-700 bg-white hover:bg-gray-100 rounded-2xl ring-1 ring-gray-200 transition-colors"
               >
-                실제 완성도 진단 리포트 · 4문항 · 면접 10선 샘플 먼저 보기 ↗
+                결과 샘플 보기
               </Link>
             </div>
 
-            <div className="mt-6 sm:mt-8 pt-6 border-t border-gray-200/80 flex flex-row gap-2 text-center w-full">
-              <div className="flex-1 flex flex-col items-center justify-center gap-1 py-2 px-1 bg-white rounded-xl border border-gray-100 shadow-xs">
-                <svg className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <p className="mt-4 text-sm text-gray-500">
+              {`무료 진단 하루 ${FREE_LIMITS.resume}회 · 완성 패키지 ${PRICE_DISPLAY}원 · 구독 없는 1회 결제`}
+            </p>
+
+            <ul className="mt-8 pt-6 border-t border-gray-200/70 flex flex-wrap gap-x-6 gap-y-3 text-sm text-gray-600">
+              <li className="flex items-center gap-2">
+                <svg className="w-4 h-4 text-gray-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                 </svg>
-                <span className="font-bold text-gray-900 text-[11px] sm:text-xs">토스페이먼츠</span>
-                <span className="text-[9.5px] sm:text-[11px] text-gray-500">안전결제</span>
-              </div>
-
-              <div className="flex-1 flex flex-col items-center justify-center gap-1 py-2 px-1 bg-white rounded-xl border border-gray-100 shadow-xs">
-                <svg className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                토스페이먼츠 안전결제
+              </li>
+              <li className="flex items-center gap-2">
+                <svg className="w-4 h-4 text-gray-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                 </svg>
-                <span className="font-bold text-gray-900 text-[11px] sm:text-xs">사업자등록</span>
-                <span className="text-[9.5px] sm:text-[11px] text-gray-500">476-12-03191</span>
-              </div>
-
-              <div className="flex-1 flex flex-col items-center justify-center gap-1 py-2 px-1 bg-white rounded-xl border border-gray-100 shadow-xs">
-                <svg className="w-4 h-4 sm:w-5 sm:h-5 text-indigo-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                생성 실패 시 자동 전액 환불
+              </li>
+              <li className="flex items-center gap-2">
+                <svg className="w-4 h-4 text-gray-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                 </svg>
-                <span className="font-bold text-gray-900 text-[11px] sm:text-xs">진단 원문 미저장</span>
-                <span className="text-[9.5px] sm:text-[11px] text-gray-500">미리보기 최대 2시간 보관</span>
-              </div>
-            </div>
+                자소서 원문 서버 미저장
+              </li>
+            </ul>
           </div>
 
           <div className="w-full">
@@ -1089,7 +1062,7 @@ export default function Home({
                   : "text-gray-600 hover:text-gray-900"
               }`}
             >
-              <span>📝 이미 쓴 자소서 진단받기</span>
+              <span>이미 쓴 자소서 진단받기</span>
               <span className="text-[11px] font-bold bg-blue-50 text-blue-600 px-2 py-0.5 rounded">
                 기본
               </span>
@@ -1106,7 +1079,7 @@ export default function Home({
                   : "text-gray-600 hover:text-gray-900"
               }`}
             >
-              <span>✨ 메모로 새로 쓰기</span>
+              <span>메모로 새로 쓰기</span>
               <span className="text-[11px] font-bold bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded">
                 1문항 무료 미리보기
               </span>

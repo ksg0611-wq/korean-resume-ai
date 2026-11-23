@@ -17,7 +17,27 @@
 body {
   color: var(--foreground);
   background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont,
+    system-ui, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  word-break: keep-all;
+}
+
+/* 한글 제목은 자간을 살짝 좁혀야 단단해 보입니다 */
+h1,
+h2,
+h3 {
+  letter-spacing: -0.02em;
+}
+
+/* 버튼·입력에도 같은 폰트 적용 (브라우저 기본값 상속 방지) */
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
 }
 
 @keyframes indeterminate {
